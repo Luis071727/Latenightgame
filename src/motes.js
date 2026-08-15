@@ -158,6 +158,9 @@ export function createMotes({ CONFIG, quality, scene }) {
 
   let freeCount = 0;
   let heldCount = 0;
+  // fired the moment a free mote decides to come along, so the wanderer can
+  // acknowledge it. Installed by the caller; absent by default.
+  let onGather = null;
 
   function spawn(x, y, z) {
     if (active.length >= capacity) return null;   // never evict a held mote
@@ -226,6 +229,7 @@ export function createMotes({ CONFIG, quality, scene }) {
         if (d2 < gather2) {
           s.state = HELD;
           s.held = 0;
+          onGather?.(s);
         } else if (d2 < attract2) {
           // A gentle lean toward whoever is nearby, well before they are close
           // enough to gather. Without it a mote is a 3-metre target in a
@@ -330,7 +334,26 @@ export function createMotes({ CONFIG, quality, scene }) {
     spawn,
     update,
 
+    /** called with the mote the moment it is picked up */
+    set onGather(fn) { onGather = fn; },
+
     get count() { return active.length; },
+
+    /**
+     * The nearest free mote to a point, or null. What the wanderer's eyes
+     * follow — held motes are already theirs and not worth looking at.
+     */
+    nearestFree(x, z, within) {
+      let best = null;
+      let bestD2 = within * within;
+      for (const s of active) {
+        if (s.state !== FREE || s.vis <= 0.2) continue;
+        const dx = s.x - x, dz = s.z - z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bestD2) { bestD2 = d2; best = s; }
+      }
+      return best;
+    },
     /** live positions, for tuning the gathering radius from the console */
     debug() {
       return active.map((s) => ({ x: +s.x.toFixed(1), y: +s.y.toFixed(1), z: +s.z.toFixed(1), state: s.state, held: +s.held.toFixed(1) }));
