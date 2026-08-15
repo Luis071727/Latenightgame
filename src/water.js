@@ -48,6 +48,47 @@ function reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer }
   water.material.uniforms.size.value = CONFIG.water.rippleSize;
   water.material.transparent = false;
 
+  /*
+   * The addon takes a single reflection sample and offsets it isotropically,
+   * which makes a small bright object mirror as a crisp displaced copy of
+   * itself — reflections end up looking like debris floating on the lake.
+   *
+   * Real water smears a reflection *along the view direction*: the spread of
+   * ripple slopes scatters the reflected rays vertically, which is why a
+   * lantern on a still lake reads as a long shimmering column rather than a
+   * second lantern. Here we replace the single tap with a few taps walked up
+   * and down the mirror texture, weighted to a soft falloff.
+   */
+  const fs = water.material.fragmentShader;
+  const oldTap = 'vec3 reflectionSample = vec3( texture2D( mirrorSampler, mirrorCoord.xy / mirrorCoord.w + distortion ) );';
+  if (!fs.includes(oldTap)) {
+    console.warn('[water] reflection tap not found; three.js Water.js may have changed');
+  }
+  water.material.fragmentShader = fs
+    .replace('vec4 getNoise( vec2 uv ) {', 'uniform float uSmear;\nuniform float uReflectivity;\nvec4 getNoise( vec2 uv ) {')
+    .replace(oldTap, /* glsl */`
+      vec2 refUv = mirrorCoord.xy / mirrorCoord.w + distortion;
+      // steeper ripples scatter more; nearby water smears more than the far shore
+      float smear = uSmear
+                  * (0.25 + 0.75 * abs(surfaceNormal.x + surfaceNormal.z))
+                  * (0.35 + 7.0 / (distance + 7.0));
+      // Taps are evenly spaced and close enough together that a point source's
+      // copies overlap into one streak. Randomised offsets were tried first
+      // and are worse: white noise turns a star — one or two pixels across —
+      // into speckle scattered along the streak rather than a smooth line.
+      vec3 reflectionSample = vec3( 0.0 );
+      float wsum = 0.0;
+      for ( int i = 0; i < 9; i ++ ) {
+        float t = ( float( i ) - 4.0 ) / 4.0;
+        float w = 1.0 - abs( t ) * 0.7;
+        reflectionSample += texture2D( mirrorSampler, refUv + vec2( 0.0, t * smear ) ).rgb * w;
+        wsum += w;
+      }
+      reflectionSample /= wsum;
+      reflectionSample *= uReflectivity;`);
+  water.material.uniforms.uSmear = { value: CONFIG.water.reflectionSmear };
+  water.material.uniforms.uReflectivity = { value: CONFIG.water.reflectivity };
+
   // The addon renders the reflection every frame. At 30fps of *reflection*
   // updates the water still reads as alive, and it halves the cost of the
   // most expensive pass in the scene.

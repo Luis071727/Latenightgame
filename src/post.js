@@ -65,7 +65,10 @@ const VignetteDitherShader = {
 };
 
 export function createPost({ CONFIG, quality, renderer, scene, camera }) {
-  const size = renderer.getSize(new THREE.Vector2());
+  // Drawing-buffer size, not CSS size: every target in the chain lives in
+  // device pixels, and sizing the bloom in CSS pixels instead leaves its
+  // resolution inconsistent with the texture it samples.
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
 
   const target = new THREE.WebGLRenderTarget(size.x, size.y, {
     type: THREE.HalfFloatType,          // keeps values above 1.0 for the bloom
@@ -105,8 +108,13 @@ export function createPost({ CONFIG, quality, renderer, scene, camera }) {
     setSize(w, h, pixelRatio) {
       composer.setPixelRatio(pixelRatio);
       composer.setSize(w, h);
+      // composer.setSize already sized every pass to the device-pixel buffer;
+      // scale bloom down from *that*, not from the CSS size
       if (bloomPass) {
-        bloomPass.setSize(w * quality.bloomScale, h * quality.bloomScale);
+        bloomPass.setSize(
+          w * pixelRatio * quality.bloomScale,
+          h * pixelRatio * quality.bloomScale
+        );
       }
     },
 

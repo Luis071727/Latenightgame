@@ -48,10 +48,16 @@ export function createHaze({ CONFIG, scene }) {
 
       void main() {
         float t = uTime * uMotion;
-        // wrap the horizontal coordinate so the band has no seam
-        vec2 p = vec2(vUv.x * 12.0, vUv.y * 3.0);
-        float n = noise(p + vec2(t * 0.012, t * 0.004)) * 0.6
-                + noise(p * 2.3 - vec2(t * 0.019, 0.0)) * 0.4;
+
+        // Sample the noise around a circle rather than along the UV. Value
+        // noise built on floor() cells does not wrap, so feeding it vUv.x
+        // directly leaves a hard vertical seam where the cylinder closes;
+        // cos/sin are periodic, so this cannot seam no matter the frequency.
+        float ang = vUv.x * 6.28318530718;
+        vec2 dir = vec2(cos(ang), sin(ang));
+        vec2 p1 = dir * 3.5 + vec2(0.0, vUv.y * 2.0) + vec2(t * 0.012, t * 0.004);
+        vec2 p2 = dir * 8.0 + vec2(vUv.y * 3.5, 0.0) - vec2(t * 0.019, 0.0);
+        float n = noise(p1) * 0.6 + noise(p2) * 0.4;
 
         // fade to nothing at the top and bottom rims
         float band = smoothstep(0.0, 0.35, vUv.y) * smoothstep(1.0, 0.55, vUv.y);

@@ -114,6 +114,73 @@ export function createLanterns({ CONFIG, quality, scene }) {
   mesh.count = 0;
   scene.add(mesh);
 
+  /* ── glow: instanced billboards for the flame's core and halo ────────
+   *
+   * Bloom alone gives a broad atmospheric spread but no hot centre, which
+   * leaves the paper looking evenly lit and washed out. This adds back the
+   * bright core and the close halo, and the bloom pass then spreads *that*.
+   * Two lobes in one quad: a tight high-power falloff over a wide soft one.
+   * It billboards against whatever camera is drawing, so it faces the
+   * mirrored camera correctly during the water's reflection pass too.
+   */
+  const glowGeo = new THREE.PlaneGeometry(1, 1);
+  const gTint = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
+  const gPower = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+  gTint.setUsage(THREE.DynamicDrawUsage);
+  gPower.setUsage(THREE.DynamicDrawUsage);
+  glowGeo.setAttribute('gTint', gTint);
+  glowGeo.setAttribute('gPower', gPower);
+
+  const glowMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uFogDensity: { value: CONFIG.world.fogDensity } },
+    vertexShader: /* glsl */`
+      attribute vec3 gTint;
+      attribute float gPower;
+      varying vec2 vUv;
+      varying vec3 vTint;
+      varying float vPower, vDepth;
+
+      void main() {
+        vUv = uv;
+        vTint = gTint;
+        vPower = gPower;
+
+        // billboard: take the instance's origin into view space, then offset
+        // by the quad corner so the card always faces the camera
+        vec4 centre = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+        float s = length(instanceMatrix[0].xyz);
+        vDepth = -centre.z;
+        gl_Position = projectionMatrix * vec4(centre.xyz + vec3(position.xy * s, 0.0), 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      uniform float uFogDensity;
+      varying vec2 vUv;
+      varying vec3 vTint;
+      varying float vPower, vDepth;
+
+      void main() {
+        float d = length(vUv - 0.5) * 2.0;
+        float f = max(0.0, 1.0 - d);
+        float core = pow(f, 6.0);
+        float halo = pow(f, 2.3);
+
+        float fog = 1.0 - exp(-pow(vDepth * uFogDensity, 2.0));
+        vec3 col = vTint * (halo * 0.30 + core * 1.6) * vPower * (1.0 - fog);
+
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  });
+
+  const glowMesh = new THREE.InstancedMesh(glowGeo, glowMat, capacity);
+  glowMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  glowMesh.frustumCulled = false;
+  glowMesh.renderOrder = 3;
+  glowMesh.count = 0;
+  scene.add(glowMesh);
+
   /* ── simulation state, one plain object per slot, never reallocated ── */
   const slots = [];
   for (let i = 0; i < capacity; i++) {
@@ -209,7 +276,8 @@ export function createLanterns({ CONFIG, quality, scene }) {
         vis *= 1 - THREE.MathUtils.clamp(
           (s.y - L.fadeStartY) / (L.fadeEndY - L.fadeStartY), 0, 1);
       }
-      if (vis <= 0.004 || s.y > L.fadeEndY || s.z < -CONFIG.world.despawnZ) {
+      const far = Math.hypot(s.x - ctx.cameraPosition.x, s.z - ctx.cameraPosition.z);
+      if (vis <= 0.004 || s.y > L.fadeEndY || far > L.despawnDistance) {
         s.active = false;
         active.splice(i, 1);
         continue;
@@ -234,19 +302,36 @@ export function createLanterns({ CONFIG, quality, scene }) {
       aTint.array[i * 3]     = tmpColor.r;
       aTint.array[i * 3 + 1] = tmpColor.g;
       aTint.array[i * 3 + 2] = tmpColor.b;
+
+      // the glow card sits at the flame, a little below the paper's middle
+      dummy.position.set(s.x, s.y - s.scale * 0.08, s.z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(s.scale * L.glowRadius);
+      dummy.updateMatrix();
+      glowMesh.setMatrixAt(i, dummy.matrix);
+
+      gPower.array[i] = s.vis * s.glow * flicker * L.glowPower;
+      gTint.array[i * 3]     = tmpColor.r;
+      gTint.array[i * 3 + 1] = tmpColor.g;
+      gTint.array[i * 3 + 2] = tmpColor.b;
     }
 
     mesh.count = active.length;
+    glowMesh.count = active.length;
     if (active.length > 0) {
       mesh.instanceMatrix.needsUpdate = true;
       aOpacity.needsUpdate = true;
       aTint.needsUpdate = true;
       aGlow.needsUpdate = true;
+      glowMesh.instanceMatrix.needsUpdate = true;
+      gTint.needsUpdate = true;
+      gPower.needsUpdate = true;
     }
   }
 
   return {
     mesh,
+    glowMesh,
     release,
     update,
     get count() { return active.length; },
@@ -254,9 +339,13 @@ export function createLanterns({ CONFIG, quality, scene }) {
     get active() { return active; },
     dispose() {
       scene.remove(mesh);
+      scene.remove(glowMesh);
       geometry.dispose();
       material.dispose();
       mesh.dispose();
+      glowGeo.dispose();
+      glowMat.dispose();
+      glowMesh.dispose();
       active.length = 0;
     },
   };

@@ -93,12 +93,35 @@ export function createFireflies({ CONFIG, quality, scene }) {
   points.renderOrder = 1;
   scene.add(points);
 
+  const R = CONFIG.fireflies.range;
+
   return {
     points,
     setViewportHeight(h) { uniforms.uScale.value = Math.min(2.2, h / 620 + 0.4); },
     update(dt, ctx) {
       uniforms.uTime.value += dt;
       uniforms.uMotion.value = ctx.motionScale;
+
+      // Wrap any firefly the camera has drifted away from around to the far
+      // side, so a few are always nearby without them rigidly following you.
+      const cx = ctx.cameraPosition.x, cz = ctx.cameraPosition.z;
+      const arr = geo.attributes.position.array;
+      let moved = false;
+      for (let i = 0; i < count; i++) {
+        const dx = arr[i * 3] - cx;
+        const dz = arr[i * 3 + 2] - cz;
+        const d = Math.hypot(dx, dz);
+        if (d > R) {
+          // Bring it back to just inside the radius on the opposite side.
+          // Mirroring straight through the camera looks like the obvious move
+          // but keeps the distance identical, so it never actually returns.
+          const k = -(R * 0.85) / d;
+          arr[i * 3]     = cx + dx * k;
+          arr[i * 3 + 2] = cz + dz * k;
+          moved = true;
+        }
+      }
+      if (moved) geo.attributes.position.needsUpdate = true;
     },
     dispose() {
       scene.remove(points);

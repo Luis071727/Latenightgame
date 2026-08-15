@@ -6,7 +6,15 @@ just something quiet to hold for a few minutes before sleep.
 
 - **Tap** — release a lantern.
 - **Hold** — release a larger, brighter one that climbs more slowly.
-- **Drag** — a soft breeze that nudges nearby lanterns sideways.
+- **One-finger drag** — a soft breeze that nudges nearby lanterns sideways.
+- **Two-finger drag** — drift. Hold the two fingers away from where they started
+  and you keep gliding, like leaning on an oar; let go and you coast to a stop.
+  Sideways steers, up and down glides.
+- **Keyboard** — `W`/`A`/`S`/`D` or the arrow keys do the same on a laptop.
+
+The lake has islands on it — low wooded silhouettes scattered from just over the
+horizon out to a few minutes' drift away. Lanterns stay where you released them,
+so you can leave a trail of them behind you and come back to it.
 
 Everything decays back to stillness on its own. After about ten minutes without a
 touch the scene dims itself to black so it won't glow all night; any tap brings it back.
@@ -64,8 +72,11 @@ console without reloading:
 ```js
 __night.CONFIG.lanterns.riseSpeed = 1.2   // lanterns climb faster
 __night.CONFIG.stars.brightness = 0.9     // brighter sky
+__night.CONFIG.movement.maxSpeed = 6      // drift across the lake faster
+__night.CONFIG.water.reflectionSmear = 0.04   // longer reflections
 __night.tier                              // which quality tier is running
 __night.downgrade()                       // step down a tier by hand
+__night.rig.state                         // position and heading on the lake
 ```
 
 ### Quality tiers
@@ -98,6 +109,8 @@ src/water.js        the lake (Water addon, or a shaded plane on low)
 src/lanterns.js     one InstancedMesh for every lantern
 src/fireflies.js    points animated entirely in the vertex shader
 src/haze.js         horizon mist band
+src/islands.js      the archipelago, merged into one draw call
+src/rig.js          where you are on the lake and which way you face
 src/holdglow.js     the pool of light under a held finger
 src/input.js        tap / hold / drag
 src/audio.js        synthesised pad and water wash
@@ -121,6 +134,16 @@ A few decisions worth knowing about if you go editing:
   reflection camera under the lake sees nothing but the underside.
 - **Instances are pooled, never allocated.** Capacity is fixed at construction and
   slots are recycled, so there is no memory growth and nothing to collect mid-flight.
+- **Reflections are smeared, not sampled once.** The stock `Water` addon takes a
+  single reflection tap and offsets it, which mirrors a lantern as a crisp
+  displaced copy of itself — reflections end up looking like debris. Real water
+  scatters a reflection along the view direction, so the shader is patched to walk
+  several taps up and down the mirror texture. The taps are evenly spaced on
+  purpose: randomised offsets turn a star, one or two pixels across, into speckle.
+- **The sky rides with you.** The dome and both star shells follow the camera, so
+  crossing the lake doesn't swing the constellations overhead. Fireflies wrap
+  around you instead, and lanterns are recycled by distance from the camera
+  rather than by absolute position.
 
 ## Browser support
 

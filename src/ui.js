@@ -4,6 +4,7 @@
  */
 export function createUI({ CONFIG, audio }) {
   const hintEl = document.getElementById('hint');
+  const hint2El = document.getElementById('hint2');
   const soundEl = document.getElementById('sound');
   const veilEl = document.getElementById('veil');
 
@@ -13,6 +14,8 @@ export function createUI({ CONFIG, audio }) {
   let lastInteraction = performance.now();
   let lastFadeUpdate = performance.now();
   let wakeLock = null;
+  let hint2Timer = null;
+  let movedOnce = false;
 
   /* ── hint ──────────────────────────────────────────────────────────── */
   const hintTimer = setTimeout(() => {
@@ -61,7 +64,21 @@ export function createUI({ CONFIG, audio }) {
         soundEl.classList.add('show');
         audio.start();
         requestWakeLock();
+
+        // once they've released a lantern, mention that the lake goes on
+        hint2Timer = setTimeout(() => {
+          if (!movedOnce) hint2El.classList.add('show');
+          setTimeout(() => hint2El.classList.remove('show'), CONFIG.ui.hint2VisibleMs);
+        }, CONFIG.ui.hint2DelayMs);
       }
+    },
+
+    /** called the first time the player actually drifts, to drop the hint */
+    noteMovement() {
+      if (movedOnce) return;
+      movedOnce = true;
+      clearTimeout(hint2Timer);
+      hint2El.classList.remove('show');
     },
 
     /**

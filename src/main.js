@@ -6,6 +6,8 @@ import { createWater } from './water.js';
 import { createLanterns } from './lanterns.js';
 import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
+import { createIslands } from './islands.js';
+import { createRig } from './rig.js';
 import { createHoldGlow } from './holdglow.js';
 import { createPost } from './post.js';
 import { createInput } from './input.js';
@@ -31,6 +33,7 @@ const CONFIG = {
     lanternCool: 0xff8f4d,   // the other end of the lantern tint range
     firefly:     0xffd08a,
     haze:        0x2a3352,
+    island:      0x05070e,   // island silhouettes, barely above the horizon
   },
 
   render: {
@@ -41,9 +44,9 @@ const CONFIG = {
   // Kept deliberately soft. Raising `strength` past ~0.9 starts to look like
   // a lens effect rather than light.
   bloom: {
-    strength: 0.62,
-    radius: 0.72,
-    threshold: 0.70,
+    strength: 0.48,
+    radius: 0.62,
+    threshold: 0.62,
   },
 
   vignette: { amount: 0.85, radius: 0.80, softness: 0.58, dither: 1.0 },
@@ -68,11 +71,13 @@ const CONFIG = {
   },
 
   water: {
-    distortion: 0.85,        // how much the surface bends the reflection;
+    distortion: 0.50,        // how much the surface bends the reflection;
                              // low keeps the lantern's mirror image coherent
     rippleSize: 9.0,         // bigger = longer, smoother swells
     flowSpeed: 0.12,         // very slow: this is a lake, not a sea
     reflectionInterval: 1 / 30,   // seconds between reflection re-renders
+    reflectionSmear: 0.018,  // how far reflections streak toward the viewer
+    reflectivity: 0.72,      // how much of the sky the lake gives back
   },
 
   stars: { count: 1500, brightness: 0.62, drift: 0.0055, twinkleSpeed: 0.35 },
@@ -83,13 +88,43 @@ const CONFIG = {
     riseSpeed: 0.55,         // units/sec
     riseSpeedBig: 0.34,      // held lanterns are heavier and climb slower
     sway: 0.16,
-    glow: 2.2,               // emissive multiplier; above ~1 it feeds the bloom
+    // Emissive multiplier for the paper. Kept modest on purpose: push it much
+    // past ~1.4 and the tone curve clips the amber toward white.
+    glow: 1.15,
+    glowRadius: 2.3,         // glow card size, relative to the lantern
+    glowPower: 0.48,         // brightness of the flame's core + halo
     drag: 0.55,              // per-second velocity decay back to stillness
     fadeStartY: 30,
     fadeEndY: 66,
+    despawnDistance: 260,    // recycled once this far from the camera
   },
 
   spawn: { nearest: 8, farthest: 80, fallbackDistance: 34 },
+
+  /* Drifting across the lake. Two fingers to steer and glide; WASD or the
+     arrow keys on a laptop. Everything is capped and heavily damped — this
+     should never feel like driving. */
+  movement: {
+    maxSpeed: 3.2,           // units/sec, roughly a slow row
+    maxTurnSpeed: 0.42,      // radians/sec
+    damping: 0.45,           // per-second velocity decay; you coast to a stop
+    deadzone: 14,            // px of two-finger offset that does nothing
+    touchTurn: 0.010,        // radians/sec² per px held away from the origin
+    touchGlide: 0.10,        // units/sec² per px held away from the origin
+    keyTurn: 1.6,            // radians/sec² while a turn key is held
+    keyGlide: 9.0,           // units/sec² while a glide key is held
+  },
+
+  /* The archipelago you drift toward. */
+  islands: {
+    seed: 7,
+    count: 16,
+    minDistance: 70, maxDistance: 470,
+    minRadius: 12, maxRadius: 42,
+    minHeight: 3.5, maxHeight: 13,
+    maxTrees: 6, treeHeight: 6.5,
+    fogDensity: 0.0035,      // how far away they melt into the horizon
+  },
 
   breeze: {
     power: 1.1,              // drag acceleration, units/sec²
@@ -102,7 +137,7 @@ const CONFIG = {
 
   wind: { strength: 0.10 },
 
-  fireflies: { count: 14, brightness: 1.5 },
+  fireflies: { count: 14, brightness: 1.5, range: 46 },
 
   haze: { radius: 110, height: 11, amount: 0.30, centerY: 2.6 },
 
@@ -115,6 +150,8 @@ const CONFIG = {
 
   ui: {
     hintDelayMs: 2600,
+    hint2DelayMs: 9000,      // when the "two fingers to drift" nudge appears
+    hint2VisibleMs: 9000,
     sleepAfterSeconds: 600,  // ~10 minutes of stillness, then it dims itself
     sleepFadeSeconds: 50,
     wakeFadeSeconds: 2.5,
@@ -199,6 +236,8 @@ function start() {
   let lanterns   = createLanterns({ CONFIG, quality, scene });
   let fireflies  = createFireflies({ CONFIG, quality, scene });
   let haze       = createHaze({ CONFIG, scene });
+  const islands  = createIslands({ CONFIG, scene });
+  const rig      = createRig({ CONFIG, camera });
   let holdGlow   = createHoldGlow({ CONFIG, scene });
   let post       = createPost({ CONFIG, quality, renderer, scene, camera });
 
@@ -280,7 +319,6 @@ function start() {
   }
 
   /* ── main loop ─────────────────────────────────────────────────────── */
-  const lookAt = new THREE.Vector3();
   const ctx = {
     time: 0, dim: 1, mood: 0, mood2: 0,
     motionScale: sceneMotion,
@@ -309,16 +347,13 @@ function start() {
     updateWind(time);
     input.update(dt);
 
-    // barely-there camera breathing
-    const bob = CONFIG.camera.bob * cameraMotion;
-    camera.position.y = CONFIG.camera.height + Math.sin(time * CONFIG.camera.bobSpeed) * bob;
-    camera.position.x = Math.sin(time * CONFIG.camera.bobSpeed * 0.63) * bob * 3.2;
-    lookAt.set(
-      Math.sin(time * 0.05) * 0.6 * cameraMotion,
-      CONFIG.camera.lookAtHeight,
-      -CONFIG.camera.lookAtDistance
-    );
-    camera.lookAt(lookAt);
+    // steer and glide, then let the rig place the camera (bob included)
+    const move = input.takeNav(dt);
+    if (move.turn || move.glide) {
+      rig.push(move.turn, move.glide);
+      ui.noteMovement();
+    }
+    rig.update(dt, time, cameraMotion);
 
     sky.update(dt, ctx);
     water.update(dt, ctx);
@@ -347,7 +382,7 @@ function start() {
     get lanterns() { return lanterns.count; },
     /** force the next quality step down, as the frame watcher would */
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
-    renderer, scene, camera,
+    renderer, scene, camera, rig,
   };
 }
 

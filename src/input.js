@@ -14,6 +14,32 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
   const pointers = new Map();
   const breezes = [];
 
+  // Where the two-finger gesture started, and how far it is currently held
+  // from there. Treating the offset as a joystick — rather than integrating
+  // the frame-to-frame delta — means you can press and hold to keep gliding,
+  // instead of having to swipe over and over to cross the lake.
+  const keys = new Set();
+  let navOrigin = null;
+  let navOffset = { x: 0, y: 0 };
+
+  /**
+   * Two or more fingers means "move", not "release a lantern" or "make a
+   * breeze". Marking every live pointer settles it for the whole gesture, so
+   * lifting back down to one finger can't accidentally drop a lantern at the
+   * end of a long drift.
+   */
+  function enterNavMode() {
+    for (const p of pointers.values()) p.nav = true;
+    navOrigin = centroid();
+    navOffset = { x: 0, y: 0 };
+  }
+
+  function centroid() {
+    let x = 0, y = 0, n = 0;
+    for (const p of pointers.values()) { x += p.x; y += p.y; n++; }
+    return n ? { x: x / n, y: y / n } : null;
+  }
+
   /** screen point → a spot on the lake, kept within a comfortable range */
   function screenToWater(px, py, out) {
     ndc.x = (px / window.innerWidth) * 2 - 1;
@@ -47,12 +73,15 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
       x: e.clientX, y: e.clientY,
       t0: performance.now(),
       dragged: false,
+      nav: false,
       world: new THREE.Vector3(),
       puffX: 0, puffZ: 0,
     };
     screenToWater(e.clientX, e.clientY, p.world);
     p.puffX = p.world.x; p.puffZ = p.world.z;
     pointers.set(e.pointerId, p);
+
+    if (pointers.size >= 2) enterNavMode();
   }
 
   function onMove(e) {
@@ -61,13 +90,22 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
     onWake();
     p.x = e.clientX; p.y = e.clientY;
 
+    // two fingers down: steer and glide instead of stirring the water
+    if (pointers.size >= 2) {
+      const c = centroid();
+      if (navOrigin && c) {
+        navOffset = { x: c.x - navOrigin.x, y: c.y - navOrigin.y };
+      }
+      return;
+    }
+
     if (!p.dragged && Math.hypot(p.x - p.x0, p.y - p.y0) > CONFIG.input.dragThreshold) {
       p.dragged = true;
     }
 
     screenToWater(p.x, p.y, p.world);
 
-    if (p.dragged) {
+    if (p.dragged && !p.nav) {
       // Throttle by distance travelled so a long drag lays down a few puffs
       // rather than one per event, and normalise the direction so a fast
       // swipe carries no more force than a slow one.
@@ -87,7 +125,9 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
     if (!p) return;
     pointers.delete(e.pointerId);
     onWake();
+    if (pointers.size < 2) { navOrigin = null; navOffset = { x: 0, y: 0 }; }
 
+    if (p.nav) return;                // that finger was steering
     if (p.dragged) return;            // that was a breeze, not a release
 
     const held = performance.now() - p.t0;
@@ -98,6 +138,23 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
   }
 
   function onCancel(e) { pointers.delete(e.pointerId); }
+
+  /* ── keyboard, for anyone opening this on a laptop ─────────────────── */
+  const NAV_KEYS = new Set([
+    'w','a','s','d','W','A','S','D',
+    'ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
+  ]);
+  function onKeyDown(e) {
+    if (!NAV_KEYS.has(e.key)) return;
+    e.preventDefault();
+    keys.add(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+    onWake();
+  }
+  function onKeyUp(e) {
+    keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+  }
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
 
   domElement.addEventListener('pointerdown', onDown, { passive: true });
   domElement.addEventListener('pointermove', onMove, { passive: true });
@@ -115,11 +172,43 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
   return {
     breezes,
 
+    /**
+     * Drain the navigation input gathered since the last frame, folding in
+     * whatever keys are held. Returns impulses, not positions.
+     */
+    takeNav(dt) {
+      const M = CONFIG.movement;
+      let turn = 0;
+      let glide = 0;
+
+      if (navOrigin) {
+        // a small deadzone, so resting two fingers on the glass doesn't drift
+        const ox = Math.abs(navOffset.x) > M.deadzone
+          ? navOffset.x - Math.sign(navOffset.x) * M.deadzone : 0;
+        const oy = Math.abs(navOffset.y) > M.deadzone
+          ? navOffset.y - Math.sign(navOffset.y) * M.deadzone : 0;
+        turn += ox * M.touchTurn * dt;
+        glide -= oy * M.touchGlide * dt;
+      }
+
+      const kTurn = (keys.has('d') || keys.has('ArrowRight') ? 1 : 0)
+                  - (keys.has('a') || keys.has('ArrowLeft') ? 1 : 0);
+      const kGlide = (keys.has('w') || keys.has('ArrowUp') ? 1 : 0)
+                   - (keys.has('s') || keys.has('ArrowDown') ? 1 : 0);
+
+      turn += kTurn * CONFIG.movement.keyTurn * dt;
+      glide += kGlide * CONFIG.movement.keyGlide * dt;
+      return { turn, glide };
+    },
+
+    /** true while a two-finger gesture or a movement key is active */
+    get navigating() { return pointers.size >= 2 || keys.size > 0; },
+
     /** how long the longest still-held finger has been down, in ms */
     heldFor() {
       let best = 0;
       for (const p of pointers.values()) {
-        if (p.dragged) continue;
+        if (p.dragged || p.nav) continue;
         best = Math.max(best, performance.now() - p.t0);
       }
       return best;
@@ -129,7 +218,7 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
     heldAt() {
       let best = null, bestT = 0;
       for (const p of pointers.values()) {
-        if (p.dragged) continue;
+        if (p.dragged || p.nav) continue;
         const t = performance.now() - p.t0;
         if (t > bestT) { bestT = t; best = p.world; }
       }
@@ -146,6 +235,8 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
     },
 
     dispose() {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
       domElement.removeEventListener('pointerdown', onDown);
       domElement.removeEventListener('pointermove', onMove);
       domElement.removeEventListener('pointerup', onUp);

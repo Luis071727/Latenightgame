@@ -145,7 +145,12 @@ export function createSky({ CONFIG, quality, scene }) {
      * @param ctx.mood2 0..1 a second, out-of-step oscillation for star density
      */
     update(dt, ctx) {
+      // The dome and both star shells ride with the camera. Stars are far
+      // enough away that they should not parallax as you cross the lake —
+      // leaving the shells at the origin would swing them overhead.
       dome.position.copy(ctx.cameraPosition);
+      near.position.copy(ctx.cameraPosition);
+      far.position.copy(ctx.cameraPosition);
 
       near.rotation.y += dt * CONFIG.stars.drift * ctx.motionScale;
       far.rotation.y  += dt * CONFIG.stars.drift * 0.45 * ctx.motionScale;

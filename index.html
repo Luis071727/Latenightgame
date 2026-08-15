@@ -61,6 +61,19 @@
   }
   #hint.show { opacity: 0.65; }
 
+  /* second hint, offered once the first tap has landed */
+  #hint2 {
+    position: fixed; left: 0; right: 0; bottom: 15vh;
+    text-align: center;
+    font: 300 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: 0.24em; text-transform: lowercase;
+    color: rgba(255, 226, 178, 0.42);
+    opacity: 0; pointer-events: none;
+    transition: opacity 3.5s ease;
+    text-shadow: 0 0 18px rgba(255, 176, 92, 0.2);
+  }
+  #hint2.show { opacity: 0.5; }
+
   /* tiny mute toggle, deliberately easy to ignore */
   #sound {
     position: fixed;
@@ -96,6 +109,7 @@
 <body>
 
 <div id="hint">tap the water</div>
+<div id="hint2">two fingers to drift</div>
 
 <div id="sound" role="button" tabindex="0" aria-label="Toggle ambient sound">
   <svg viewBox="0 0 24 24" class="on"  aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
