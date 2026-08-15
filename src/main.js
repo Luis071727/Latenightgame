@@ -19,7 +19,7 @@ import { createUI } from './ui.js';
 import { loadSettings, saveSettings } from './save.js';
 import { createArchive } from './archive.js';
 import { createFragments } from './fragments.js';
-import { RARITY } from './discoveries.js';
+import { RARITY, title, cosmetic } from './discoveries.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIG — everything worth tweaking lives here.
@@ -500,6 +500,19 @@ function start() {
   const camera = new THREE.PerspectiveCamera(CONFIG.camera.fovPortrait, 1, 0.1, 900);
   camera.position.set(0, CONFIG.camera.height, 6 + CONFIG.camera.distance);
 
+  /* The archive owns everything the player keeps: which world they are in,
+     what they woke and found in each, what they have unlocked and what they
+     are wearing. It migrates a pre-archive save forward rather than replacing
+     it, so a returning player arrives partway along rather than at zero.
+     Built before anything else because the UI, the world loader and the
+     wanderer's own colours all ask it questions. */
+  const archive = createArchive({
+    worlds: WORLDS,
+    monumentTarget: CONFIG.motes.monumentTarget,
+  });
+  CONFIG.world.start =
+    ((archive.currentWorld % WORLDS.length) + WORLDS.length) % WORLDS.length;
+
   /* ── scene systems ─────────────────────────────────────────────────── */
   let sky        = createSky({ CONFIG, quality, scene });
   let water      = null;               // only the worlds that have any
@@ -536,6 +549,30 @@ function start() {
     onPaceChange: applyPaceChoice,
     onReset: resetJourney,
   });
+  /* What the archive says when it grants something. All three are told in the
+     same quiet voice as a discovery and go away by themselves; the queue in
+     the UI keeps them from talking over each other when a single find
+     completes a set and passes a mastery threshold at once. */
+  archive.onCollection = (c) => {
+    ui.showMemory('collection complete', c.name,
+      'Every piece of it found.', 'rare');
+    audio.addLayer();
+  };
+  archive.onUnlock = ({ type, id }) => {
+    const c = type === 'title' ? title(id) : cosmetic(type, id);
+    if (!c) return;
+    const kind = type === 'title' ? 'new title'
+      : type === 'monument' ? 'the monument answers'
+      : `new ${type}`;
+    ui.showMemory(kind, c.name, c.note || '', 'dream');
+  };
+  archive.onMastery = ({ world: key, at }) => {
+    if (at < 1) return;    // the quarters are told by what they unlock
+    const w = WORLDS.find((x) => x.key === key);
+    ui.showMemory('world known', w ? w.name : key,
+      'You have seen everything it had to show you.', 'mythic');
+  };
+
   ui.onSettingsSave = saveSettings;
   ui.onBegin = () => ui.showWorldName(world.name, 1400);
   ui.onStep = () => {
@@ -570,16 +607,6 @@ function start() {
   let delivered = 0;
   let gateAnnounced = false;   // "a gate has opened" is said once per visit
 
-  /* The archive owns everything the player keeps: which world they are in,
-     what they woke and found in each, what they have unlocked and what they
-     are wearing. It migrates a pre-archive save forward rather than replacing
-     it, so a returning player arrives partway along rather than at zero. */
-  const archive = createArchive({
-    worlds: WORLDS,
-    monumentTarget: CONFIG.motes.monumentTarget,
-  });
-  CONFIG.world.start = ((archive.currentWorld % WORLDS.length) + WORLDS.length) % WORLDS.length;
-
   function loadWorld(index) {
     worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
     world = WORLDS[worldIndex];
@@ -604,6 +631,10 @@ function start() {
     motes.setPalette(p);
     motes.setFogDensity(world.fog.density);
     motes.clear();
+    // Left undressed on purpose: `p` here is the world's raw palette of hex
+    // numbers, not the cycler's Colors, and the mood pass runs on the very
+    // first frame after this — so the worn cloak is applied before anything
+    // is ever drawn.
     character.setPalette(p);
     character.setFogDensity(world.fog.density);
     if (companion) {
@@ -809,8 +840,35 @@ function start() {
    * off the same phase, so it is left out of this — colouring it twice makes
    * the two cycles fight and the horizon wobbles.
    */
+  /**
+   * Lay the worn cloak over whatever the world was going to tint the robe.
+   *
+   * This has to happen inside the mood pass rather than once on equip: the
+   * palette is recomputed and pushed to everything several times a second as
+   * the colour cycle drifts, so a cosmetic applied anywhere else is overwritten
+   * within a quarter of a second and reads as a flicker. The default cloak
+   * returns null and the world's own choice stands, exactly as it always did.
+   */
+  function dressPalette(p) {
+    const cloak = archive.cloakColors();
+    if (cloak) for (const k in cloak) p[k].set(cloak[k]);
+    return p;
+  }
+
+  /* The companion takes its colour from the same palette key as the ambient
+     fireflies, so a chosen companion has to be handed over on its own rather
+     than by overriding that key — otherwise picking one recolours every
+     firefly in the world along with it. */
+  const companionTint = { firefly: 0 };
+  function dressCompanion(p) {
+    if (!companion) return;
+    companionTint.firefly = archive.companionColor() ?? p.firefly.getHex();
+    companion.setPalette(companionTint);
+  }
+
   function applyMood(mood) {
-    const p = cyclePalette(mood);
+    const p = dressPalette(cyclePalette(mood));
+    dressCompanion(p);
     terrain.setPalette(p);
     content.setPalette(p);
     haze.setPalette(p);
