@@ -1,32 +1,41 @@
 /**
- * The bits around the edges: the opening hint, the mute button, the sleep
- * fade, and the screen wake lock.
+ * The bits around the edges: the title, the opening hints, the corner
+ * controls, the settings panel, the sleep fade, and the screen wake lock.
+ *
+ * The philosophy is that the world is the interface and everything here is
+ * margin. The title exists because arriving somewhere deserves a threshold;
+ * the settings exist because volume and motion are the player's to decide;
+ * everything else fades itself away as soon as it has been understood.
  */
-export function createUI({ CONFIG, audio }) {
+export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityChange, onReset }) {
   const hintEl = document.getElementById('hint');
   const hint2El = document.getElementById('hint2');
+  const worldNameEl = document.getElementById('worldname');
   const soundEl = document.getElementById('sound');
+  const gearEl = document.getElementById('gear');
+  const panelEl = document.getElementById('panel');
+  const panelCardEl = document.getElementById('panel-card');
+  const titleEl = document.getElementById('title');
+  const beginEl = document.getElementById('begin');
+  const tapmarkEl = document.getElementById('tapmark');
   const veilEl = document.getElementById('veil');
   const flashEl = document.getElementById('flash');
 
-  let touched = false;
+  let began = false;
   let dim = 1;                  // 1 = awake, 0 = fully asleep
   let lastInteraction = performance.now();
   let lastFadeUpdate = performance.now();
   let wakeLock = null;
+  let hintTimer = null;
   let hint2Timer = null;
   let movedOnce = false;
+  let worldNameTimer = null;
 
   // the walk-through-a-gate fade: up into soft light, swap, back down
   let flash = 0;
   let phase = null;             // 'in' | 'hold' | 'out'
   let held = 0;
   let onSwap = null;
-
-  /* ── hint ──────────────────────────────────────────────────────────── */
-  const hintTimer = setTimeout(() => {
-    if (!touched) hintEl.classList.add('show');
-  }, CONFIG.ui.hintDelayMs);
 
   /* ── wake lock (optional everywhere, present almost nowhere) ───────── */
   async function requestWakeLock() {
@@ -37,53 +46,216 @@ export function createUI({ CONFIG, audio }) {
     } catch { /* refused or unsupported — the scene doesn't depend on it */ }
   }
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && !wakeLock && touched) requestWakeLock();
+    if (!document.hidden && !wakeLock && began) requestWakeLock();
   });
 
-  /* ── mute ──────────────────────────────────────────────────────────── */
+  /* ── mute, from either the corner button or the panel toggle ───────── */
+  const setSoundEl = document.getElementById('set-sound');
+
+  function reflectMute() {
+    soundEl.classList.toggle('muted', audio.muted);
+    setSoundEl.setAttribute('aria-pressed', String(!audio.muted));
+  }
   function toggleMute() {
-    soundEl.classList.toggle('muted', audio.toggleMute());
-    lastInteraction = performance.now();
+    audio.toggleMute();
+    settings.muted = audio.muted;
+    reflectMute();
+    touch();
+    saveSoon();
   }
   soundEl.addEventListener('click', toggleMute);
   soundEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMute(); }
   });
 
+  /* ── the settings panel ────────────────────────────────────────────── */
+  const musicEl = document.getElementById('set-music');
+  const ambEl = document.getElementById('set-amb');
+  const motionEl = document.getElementById('set-motion');
+  const qualityEl = document.getElementById('set-quality');
+  const resetEl = document.getElementById('set-reset');
+  const RESET_LABEL = resetEl.textContent;
+
+  let saveTimer = null;
+  let onSettingsSave = null;    // installed by main once persistence is up
+  function saveSoon() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => onSettingsSave?.(settings), 400);
+  }
+
+  function reflectSettings() {
+    reflectMute();
+    musicEl.value = String(settings.musicVolume);
+    ambEl.value = String(settings.ambienceVolume);
+    const reduced = settings.reducedMotion
+      ?? matchMedia('(prefers-reduced-motion: reduce)').matches;
+    motionEl.setAttribute('aria-pressed', String(reduced));
+    for (const b of qualityEl.querySelectorAll('button')) {
+      b.classList.toggle('on', b.dataset.q === settings.quality);
+    }
+  }
+
+  function openPanel() {
+    reflectSettings();
+    panelEl.classList.add('open');
+    panelEl.setAttribute('aria-hidden', 'false');
+    touch();
+  }
+  function closePanel() {
+    panelEl.classList.remove('open');
+    panelEl.setAttribute('aria-hidden', 'true');
+    resetEl.classList.remove('confirm');
+    resetEl.textContent = RESET_LABEL;
+    touch();
+  }
+
+  gearEl.addEventListener('click', () => {
+    if (panelEl.classList.contains('open')) closePanel(); else openPanel();
+  });
+  gearEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(); }
+  });
+  // a tap on the dimmed world behind the card puts it away
+  panelEl.addEventListener('pointerdown', (e) => {
+    if (!panelCardEl.contains(e.target)) closePanel();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panelEl.classList.contains('open')) closePanel();
+  });
+
+  setSoundEl.addEventListener('click', toggleMute);
+
+  musicEl.addEventListener('input', () => {
+    settings.musicVolume = parseFloat(musicEl.value);
+    audio.setMusicVolume(settings.musicVolume);
+    touch(); saveSoon();
+  });
+  ambEl.addEventListener('input', () => {
+    settings.ambienceVolume = parseFloat(ambEl.value);
+    audio.setAmbienceVolume(settings.ambienceVolume);
+    touch(); saveSoon();
+  });
+
+  motionEl.addEventListener('click', () => {
+    const now = !(motionEl.getAttribute('aria-pressed') === 'true');
+    settings.reducedMotion = now;
+    motionEl.setAttribute('aria-pressed', String(now));
+    onMotionChange?.(now);
+    touch(); saveSoon();
+  });
+
+  qualityEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-q]');
+    if (!b || b.dataset.q === settings.quality) return;
+    settings.quality = b.dataset.q;
+    reflectSettings();
+    onQualityChange?.(settings.quality);
+    touch(); saveSoon();
+  });
+
+  // resetting a journey asks twice, then quietly forgets everything
+  let resetArm = null;
+  resetEl.addEventListener('click', () => {
+    touch();
+    if (resetEl.classList.contains('confirm')) {
+      clearTimeout(resetArm);
+      resetEl.classList.remove('confirm');
+      resetEl.textContent = RESET_LABEL;
+      closePanel();
+      onReset?.();
+      return;
+    }
+    resetEl.classList.add('confirm');
+    resetEl.textContent = 'touch again to let it go';
+    resetArm = setTimeout(() => {
+      resetEl.classList.remove('confirm');
+      resetEl.textContent = RESET_LABEL;
+    }, 4000);
+  });
+
+  /* ── the title ─────────────────────────────────────────────────────── */
+  let onBegin = null;
+  beginEl.addEventListener('click', () => {
+    if (began) return;
+    began = true;
+    lastInteraction = performance.now();
+    titleEl.classList.add('gone');
+
+    // the begin tap is the user gesture the browser wants for audio
+    audio.start();
+    requestWakeLock();
+    soundEl.classList.add('show');
+    gearEl.classList.add('show');
+    reflectMute();
+
+    // teach by waiting: the movement hint only appears if they haven't moved
+    hintTimer = setTimeout(() => {
+      if (!movedOnce) hintEl.classList.add('show');
+    }, CONFIG.ui.hintDelayMs);
+    hint2Timer = setTimeout(() => {
+      if (!movedOnce) hint2El.classList.add('show');
+      setTimeout(() => hint2El.classList.remove('show'), CONFIG.ui.hint2VisibleMs);
+    }, CONFIG.ui.hint2DelayMs);
+
+    onBegin?.();
+  });
+
+  /** anything at all happened — keep the sleep fade at bay */
+  function touch() {
+    lastInteraction = performance.now();
+  }
+
   return {
-    /** true once the first touch has landed */
-    get touched() { return touched; },
+    /** true once "begin wandering" has been pressed */
+    get began() { return began; },
     get dim() { return dim; },
 
+    /** main installs what should happen the moment the title lifts */
+    set onBegin(fn) { onBegin = fn; },
+    /** ...and how the settings should be written down */
+    set onSettingsSave(fn) { onSettingsSave = fn; },
+
     /**
-     * Called on every pointer event. The first one starts audio and clears
-     * the hint; the rest just keep the sleep timer at bay.
+     * Called on every pointer event on the canvas. Before the title has been
+     * dismissed it does nothing; after, it keeps the sleep timer at bay.
      */
     wake() {
-      lastInteraction = performance.now();
-
-      if (!touched) {
-        touched = true;
-        clearTimeout(hintTimer);
-        hintEl.classList.remove('show');
-        soundEl.classList.add('show');
-        audio.start();
-        requestWakeLock();
-
-        // if they still haven't gone anywhere, mention that they can
-        hint2Timer = setTimeout(() => {
-          if (!movedOnce) hint2El.classList.add('show');
-          setTimeout(() => hint2El.classList.remove('show'), CONFIG.ui.hint2VisibleMs);
-        }, CONFIG.ui.hint2DelayMs);
-      }
+      if (!began) return;
+      touch();
     },
 
-    /** called the first time the player actually drifts, to drop the hint */
+    /** called the first time the player actually drifts, to drop the hints */
     noteMovement() {
       if (movedOnce) return;
       movedOnce = true;
+      clearTimeout(hintTimer);
       clearTimeout(hint2Timer);
+      hintEl.classList.remove('show');
       hint2El.classList.remove('show');
+    },
+
+    /** a soft breath of light where a tap landed */
+    tapAt(x, y) {
+      if (!tapmarkEl) return;
+      tapmarkEl.style.transform = `translate(${x}px, ${y}px)`;
+      // restart the animation even if the last one is still running
+      tapmarkEl.classList.remove('ripple');
+      void tapmarkEl.offsetWidth;
+      tapmarkEl.classList.add('ripple');
+    },
+
+    /**
+     * Name the world that has just come into view, then let the name go.
+     * @param delayMs held back so the name arrives as the gate-light clears
+     */
+    showWorldName(name, delayMs = 0) {
+      clearTimeout(worldNameTimer);
+      worldNameEl.classList.remove('show');
+      worldNameTimer = setTimeout(() => {
+        worldNameEl.textContent = name;
+        worldNameEl.classList.add('show');
+        worldNameTimer = setTimeout(() => worldNameEl.classList.remove('show'), 5200);
+      }, delayMs);
     },
 
     /** true while a gate transition is running */
@@ -145,8 +317,9 @@ export function createUI({ CONFIG, audio }) {
         flashEl.style.opacity = (flash * flash * (3 - 2 * flash)).toFixed(3);
       }
 
+      // the sleep timer only starts counting once the title has lifted
       let target = 1;
-      if (idle > CONFIG.ui.sleepAfterSeconds) {
+      if (began && idle > CONFIG.ui.sleepAfterSeconds) {
         target = 1 - (idle - CONFIG.ui.sleepAfterSeconds) / CONFIG.ui.sleepFadeSeconds;
         target = Math.max(0, Math.min(1, target));
       }

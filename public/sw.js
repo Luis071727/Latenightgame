@@ -7,13 +7,16 @@
  * asset filenames and a given URL's contents never change. Bumping VERSION
  * drops the old cache wholesale.
  */
-const VERSION = 'soft-worlds-v2';
+const VERSION = 'soft-worlds-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(VERSION).then((cache) =>
-      cache.addAll(['/', '/manifest.webmanifest']).catch(() => {})
+      cache.addAll([
+        '/', '/manifest.webmanifest',
+        '/fonts/cormorant-garamond-300.woff2',
+      ]).catch(() => {})
     )
   );
 });

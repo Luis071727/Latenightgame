@@ -38,6 +38,14 @@ let go and the world leans you gently back toward its middle.
 After about ten minutes without a touch the whole thing dims itself to black so
 it won't glow all night. Any tap brings it back.
 
+It opens on a title over the live world — **begin wandering** is the tap that
+also lets the browser start the audio. A small gear in the corner opens the
+settings: sound, music and ambience volume, reduced motion, graphics quality,
+and a way to begin the journey again. The journey itself — which world you are
+in, what you have woken there, how full the monument is — is written to
+localStorage as you go, so a refresh or a phone quietly killing the tab
+overnight puts you back where you drifted off.
+
 ### The worlds
 
 | | palette | grows | monument | sky |
@@ -113,6 +121,9 @@ __night.mood(1)                             // hold the far end of the colour cy
 __night.progress                            // awake / gate / motes / delivered / layers
 __night.tier                                // which quality tier is running
 __night.downgrade()                         // step down a tier by hand
+__night.setTier('high')                     // jump to a tier, as the settings would
+__night.journey                             // what the save file currently remembers
+__night.settings                            // what the settings panel currently holds
 ```
 
 ### Per-world tuning
@@ -157,8 +168,10 @@ noticeable than sitting one notch below perfect.
 | Water reflections | 512px | 256px | off (shaded plane) |
 | Pixel ratio cap | 2 | 1.75 | 1.25 |
 
-Append `?tier=high`, `?tier=medium` or `?tier=low` to force one. A forced tier is
-pinned — the frame watcher won't override a deliberate choice.
+Append `?tier=high`, `?tier=medium` or `?tier=low` to force one, or pick a tier
+in the settings panel — either way it is pinned, and the frame watcher won't
+override a deliberate choice. The settings choice is remembered between visits;
+`auto` hands control back to the guess.
 
 A downgrade rebuilds the world in place: the fractals thin out, the ground
 coarsens, and the motes in flight are lost. It costs a fraction of a second, in
@@ -183,7 +196,8 @@ src/water.js        lakes (Water addon, or a shaded plane on low)
 src/fireflies.js    points animated entirely in the vertex shader
 src/haze.js         horizon mist band
 src/audio.js        drone, noise wash, and the layers that come up as you explore
-src/ui.js           hint, mute, gate fade, sleep fade, wake lock
+src/ui.js           title, hints, settings panel, gate fade, sleep fade, wake lock
+src/save.js         settings + journey persistence, best-effort localStorage
 src/quality.js      tier detection + the frame-time watcher
 src/textures.js     the water normal map and the seeded PRNG
 public/             manifest, icons, OG image, service worker

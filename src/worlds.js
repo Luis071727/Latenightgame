@@ -431,6 +431,28 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
     },
 
     /**
+     * Re-light structures woken on an earlier visit, instantly — a remembered
+     * journey should be found as it was left, not watched waking up again.
+     * Indices are stable because the scatter is seeded; anything past this
+     * tier's structure count is quietly ignored.
+     *
+     * @param onAwaken called once per restored structure, e.g. to bring the
+     *                 audio layers back up to where they were
+     */
+    restoreAwake(indices, onAwaken) {
+      for (const i of indices) {
+        const s = structures[i];
+        if (!s || s.awake) continue;
+        s.awake = true;
+        awake++;
+        this.setBloom(i, 1);
+        s.vis = 1;
+        s.glow = CONFIG.awaken.lightPower;
+        onAwaken?.(i, s);
+      }
+    },
+
+    /**
      * Wake anything the wanderer has walked near, and carry on lighting
      * whatever is already waking. Awakening is one-way for the visit: a
      * structure that is lit stays lit however far away you go.
