@@ -354,9 +354,9 @@
     box-shadow: 0 0 12px var(--glow);
   }
 
-  /* the quality picker: four small words, one of them lit */
-  #set-quality { display: flex; gap: 4px; }
-  #set-quality button {
+  /* segmented pickers — a few small words, one of them lit */
+  .seg { display: flex; gap: 4px; }
+  .seg button {
     appearance: none; -webkit-appearance: none;
     background: none; border: 1px solid transparent;
     border-radius: 999px;
@@ -367,7 +367,7 @@
     cursor: pointer;
     transition: color 0.25s ease, border-color 0.25s ease;
   }
-  #set-quality button.on {
+  .seg button.on {
     color: var(--accent);
     border-color: rgba(255, 214, 168, 0.35);
   }
@@ -454,8 +454,16 @@
       <button id="set-motion" class="toggle" aria-pressed="false" aria-label="Reduced motion"></button>
     </div>
     <div class="row">
+      <label>pace</label>
+      <div id="set-pace" class="seg" role="radiogroup" aria-label="Walking pace">
+        <button data-p="stroll">stroll</button>
+        <button data-p="wander" class="on">wander</button>
+        <button data-p="drift">drift</button>
+      </div>
+    </div>
+    <div class="row">
       <label>quality</label>
-      <div id="set-quality" role="radiogroup" aria-label="Graphics quality">
+      <div id="set-quality" class="seg" role="radiogroup" aria-label="Graphics quality">
         <button data-q="auto" class="on">auto</button>
         <button data-q="low">low</button>
         <button data-q="medium">med</button>

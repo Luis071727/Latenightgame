@@ -91,10 +91,18 @@ export function createRig({ CONFIG, camera, terrain }) {
        * the turn is already done: pushing the stick behind you makes the
        * figure turn around rather than reverse into the move.
        */
+      // The pace setting scales the ceilings, never the feel: the coast, the
+      // capped turn and the damping stay what they were at every pace.
+      const pace = M.paceScale ?? 1;
+      const maxSpeed = M.maxSpeed * pace;
+
       headingVector(forward);
       if (wantStrength > 0.001) {
         const align = Math.max(0, forward.x * wantX + forward.z * wantZ);
-        const push = M.accel * wantStrength * (0.25 + 0.75 * align) * dt;
+        // strength is shaped before it drives travel, so a light push turns
+        // the figure on the spot and only a committed one carries them off
+        const drive = Math.pow(wantStrength, M.drive ?? 1);
+        const push = M.accel * pace * drive * (0.25 + 0.75 * align) * dt;
         state.vx += forward.x * push;
         state.vz += forward.z * push;
       }
@@ -122,10 +130,10 @@ export function createRig({ CONFIG, camera, terrain }) {
       state.vz *= damp;
 
       state.speed = Math.hypot(state.vx, state.vz);
-      if (state.speed > M.maxSpeed) {
-        const k = M.maxSpeed / state.speed;
+      if (state.speed > maxSpeed) {
+        const k = maxSpeed / state.speed;
         state.vx *= k; state.vz *= k;
-        state.speed = M.maxSpeed;
+        state.speed = maxSpeed;
       }
 
       state.x += state.vx * dt;

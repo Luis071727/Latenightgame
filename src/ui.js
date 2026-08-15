@@ -7,7 +7,7 @@
  * the settings exist because volume and motion are the player's to decide;
  * everything else fades itself away as soon as it has been understood.
  */
-export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityChange, onReset }) {
+export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityChange, onPaceChange, onReset }) {
   const hintEl = document.getElementById('hint');
   const hint2El = document.getElementById('hint2');
   const worldNameEl = document.getElementById('worldname');
@@ -74,6 +74,7 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const ambEl = document.getElementById('set-amb');
   const motionEl = document.getElementById('set-motion');
   const qualityEl = document.getElementById('set-quality');
+  const paceEl = document.getElementById('set-pace');
   const resetEl = document.getElementById('set-reset');
   const RESET_LABEL = resetEl.textContent;
 
@@ -93,6 +94,9 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
     motionEl.setAttribute('aria-pressed', String(reduced));
     for (const b of qualityEl.querySelectorAll('button')) {
       b.classList.toggle('on', b.dataset.q === settings.quality);
+    }
+    for (const b of paceEl.querySelectorAll('button')) {
+      b.classList.toggle('on', b.dataset.p === settings.pace);
     }
   }
 
@@ -151,6 +155,15 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
     settings.quality = b.dataset.q;
     reflectSettings();
     onQualityChange?.(settings.quality);
+    touch(); saveSoon();
+  });
+
+  paceEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-p]');
+    if (!b || b.dataset.p === settings.pace) return;
+    settings.pace = b.dataset.p;
+    reflectSettings();
+    onPaceChange?.(settings.pace);
     touch(); saveSoon();
   });
 

@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS = {
   ambienceVolume: 1,       // 0..1, scales the noise wash
   reducedMotion: null,     // null = follow the OS preference; true/false = chosen
   quality: 'auto',         // 'auto' | 'low' | 'medium' | 'high'
+  pace: 'wander',          // 'stroll' | 'wander' | 'drift'
 };
 
 export function loadSettings() {

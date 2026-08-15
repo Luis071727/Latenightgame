@@ -234,16 +234,25 @@ const CONFIG = {
 
   /* Wandering. Drag anywhere for a floating joystick, tap ahead of yourself to
      drift that way, or WASD / arrow keys on a laptop. Everything is capped and
-     heavily damped — this should never feel like driving. */
+     heavily damped — this should never feel like driving.
+
+     `paceScale` multiplies maxSpeed and accel together, and is what the pace
+     setting writes: the ceilings scale but the character of the movement — the
+     heavy coast, the capped turn — stays exactly what it was. `drive` shapes
+     stick strength into travel: above 1 a light push mostly *turns* the
+     figure, so you can look around without gliding off. */
   movement: {
     maxSpeed: 2.5,           // units/sec, an unhurried walking pace
-    accel: 10.0,             // units/sec² while the stick is fully over
+    accel: 14.0,             // units/sec² while the stick is fully over
+    paceScale: 1.15,         // set from settings.pace via `paces` below
+    paces: { stroll: 0.85, wander: 1.15, drift: 1.5 },
+    drive: 1.6,              // exponent on stick strength → forward push
     damping: 0.03,           // per-second velocity decay; you settle, not skid
     maxTurnSpeed: 1.7,       // radians/sec, hard ceiling
-    turnGain: 3.2,           // how eagerly the heading chases the stick
-    turnResponse: 5.0,       // damping rate of the turn itself
-    deadzone: 12,            // px of stick offset that does nothing
-    stickRadius: 92,         // px from the origin that counts as fully over
+    turnGain: 4.0,           // how eagerly the heading chases the stick
+    turnResponse: 7.0,       // damping rate of the turn itself
+    deadzone: 10,            // px of stick offset that does nothing
+    stickRadius: 78,         // px from the origin that counts as fully over
     groundFollow: 7.0,       // how quickly the figure settles onto the ground
     edgeAt: 0.88,            // fraction of the world radius where it leans back
     edgePull: 9.0,           // units/sec² of that lean, at the very edge
@@ -415,12 +424,20 @@ function start() {
   audio.setMusicVolume(settings.musicVolume);
   audio.setAmbienceVolume(settings.ambienceVolume);
 
+  // the pace preset scales speed and acceleration together; nothing else
+  function applyPaceChoice(pace) {
+    const M = CONFIG.movement;
+    M.paceScale = M.paces[pace] ?? M.paces.wander;
+  }
+  applyPaceChoice(settings.pace);
+
   const ui = createUI({
     CONFIG,
     audio,
     settings,
     onMotionChange: applyMotionPreference,
     onQualityChange: applyQualityChoice,
+    onPaceChange: applyPaceChoice,
     onReset: resetJourney,
   });
   ui.onSettingsSave = saveSettings;

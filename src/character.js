@@ -278,7 +278,8 @@ export function createCharacter({ CONFIG, quality, scene }) {
      *             is currently moving and turning
      */
     update(dt, ctx, rig) {
-      const speed01 = THREE.MathUtils.clamp(rig.speed / CONFIG.movement.maxSpeed, 0, 1);
+      const topSpeed = CONFIG.movement.maxSpeed * (CONFIG.movement.paceScale ?? 1);
+      const speed01 = THREE.MathUtils.clamp(rig.speed / topSpeed, 0, 1);
 
       group.position.set(rig.x, rig.y, rig.z);
       group.rotation.y = rig.yaw;
@@ -303,7 +304,7 @@ export function createCharacter({ CONFIG, quality, scene }) {
       localMove.set(
         rig.vx * cos - rig.vz * sin,
         rig.vx * sin + rig.vz * cos
-      ).multiplyScalar(1 / Math.max(CONFIG.movement.maxSpeed, 0.001));
+      ).multiplyScalar(1 / Math.max(topSpeed, 0.001));
 
       robeUniforms.uTime.value = ctx.time;
       robeUniforms.uSpeed.value = speed01;
