@@ -21,6 +21,66 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
  */
 
 /**
+ * A gentle mirror symmetry, run on the scene before the bloom so what it
+ * folds is light and not an already-graded image.
+ *
+ * Three decisions keep this restful rather than sickening. It is *blended*,
+ * not applied — most of what you see is still the plain render. It turns very
+ * slowly, slowly enough that you notice the frame has changed without ever
+ * catching it moving. And it is masked out of the middle of the screen, so
+ * the wanderer and the ground at their feet are never mirrored: the periphery
+ * dreams while the thing you are steering stays exactly where you put it.
+ *
+ * Folding the whole frame was the obvious first version and it is genuinely
+ * unpleasant — the ground swims under you and there is nothing fixed left to
+ * hold on to.
+ */
+const KaleidoscopeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uAmount:  { value: 0.0 },
+    uAngle:   { value: 0.0 },
+    uSegments:{ value: 6.0 },
+    uAspect:  { value: 1.0 },
+    uInner:   { value: 0.30 },
+    uOuter:   { value: 0.78 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform float uAmount, uAngle, uSegments, uAspect, uInner, uOuter;
+    varying vec2 vUv;
+
+    void main() {
+      vec4 base = texture2D(tDiffuse, vUv);
+
+      if (uAmount <= 0.001) { gl_FragColor = base; return; }
+
+      // aspect-corrected polar coordinates about the centre of the frame
+      vec2 p = (vUv - 0.5) * vec2(uAspect, 1.0);
+      float r = length(p);
+      float a = atan(p.y, p.x) + uAngle;
+
+      // fold the angle into one wedge and mirror inside it
+      float seg = 6.28318530718 / uSegments;
+      a = mod(a, seg);
+      a = abs(a - seg * 0.5);
+      a -= uAngle;
+
+      vec2 uv = vec2(cos(a), sin(a)) * r / vec2(uAspect, 1.0) + 0.5;
+      vec4 folded = texture2D(tDiffuse, clamp(uv, vec2(0.002), vec2(0.998)));
+
+      float mask = smoothstep(uInner, uOuter, r);
+      gl_FragColor = mix(base, folded, uAmount * mask);
+    }`,
+};
+
+/**
  * Vignette + dither, run *after* tone mapping so it works in display space.
  *
  * The dither matters more than it sounds: this scene is mostly a very dark,
@@ -64,7 +124,7 @@ const VignetteDitherShader = {
     }`,
 };
 
-export function createPost({ CONFIG, quality, renderer, scene, camera }) {
+export function createPost({ CONFIG, quality, renderer, scene, camera, motion = 1 }) {
   // Drawing-buffer size, not CSS size: every target in the chain lives in
   // device pixels, and sizing the bloom in CSS pixels instead leaves its
   // resolution inconsistent with the texture it samples.
@@ -77,6 +137,22 @@ export function createPost({ CONFIG, quality, renderer, scene, camera }) {
 
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
+
+  // Between the scene and the bloom: the symmetry folds light, and the bloom
+  // then spreads what it folded. The other order works but looks like a filter
+  // laid over a photograph rather than something happening in the world.
+  const K = CONFIG.kaleidoscope;
+  let kaleidoPass = null;
+  let kaleidoAngle = 0;
+  if (K.enabled && quality.kaleidoscope) {
+    kaleidoPass = new ShaderPass(KaleidoscopeShader);
+    kaleidoPass.uniforms.uSegments.value = K.segments;
+    kaleidoPass.uniforms.uInner.value = K.inner;
+    kaleidoPass.uniforms.uOuter.value = K.outer;
+    // reduced motion keeps the symmetry but stops it turning, and halves it
+    kaleidoPass.uniforms.uAmount.value = K.amount * (motion < 1 ? K.reducedScale : 1);
+    composer.addPass(kaleidoPass);
+  }
 
   let bloomPass = null;
   if (quality.bloom) {
@@ -108,6 +184,7 @@ export function createPost({ CONFIG, quality, renderer, scene, camera }) {
     setSize(w, h, pixelRatio) {
       composer.setPixelRatio(pixelRatio);
       composer.setSize(w, h);
+      if (kaleidoPass) kaleidoPass.uniforms.uAspect.value = w / h;
       // composer.setSize already sized every pass to the device-pixel buffer;
       // scale bloom down from *that*, not from the CSS size
       if (bloomPass) {
@@ -118,7 +195,20 @@ export function createPost({ CONFIG, quality, renderer, scene, camera }) {
       }
     },
 
-    render(dt) { composer.render(dt); },
+    /** 0..1, for fading the symmetry out during a transition */
+    setKaleidoscope(scale) {
+      if (!kaleidoPass) return;
+      kaleidoPass.uniforms.uAmount.value =
+        CONFIG.kaleidoscope.amount * (motion < 1 ? CONFIG.kaleidoscope.reducedScale : 1) * scale;
+    },
+
+    render(dt) {
+      if (kaleidoPass) {
+        kaleidoAngle += dt * CONFIG.kaleidoscope.speed * motion;
+        kaleidoPass.uniforms.uAngle.value = kaleidoAngle;
+      }
+      composer.render(dt);
+    },
 
     dispose() {
       composer.dispose();

@@ -7,7 +7,7 @@ import { createLanterns } from './lanterns.js';
 import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
 import { createTerrain } from './terrain.js';
-import { WORLDS, createWorldContent } from './worlds.js';
+import { WORLDS, createWorldContent, makePaletteCycler } from './worlds.js';
 import { createRig } from './rig.js';
 import { createCharacter } from './character.js';
 import { createPost } from './post.js';
@@ -67,6 +67,22 @@ const CONFIG = {
   },
 
   vignette: { amount: 0.85, radius: 0.80, softness: 0.58, dither: 1.0 },
+
+  /* The mirror symmetry at the edges of the frame. `amount` is the one to be
+     careful with: it is blended over the plain render, and much past ~0.35 the
+     periphery stops being dreamlike and starts being disorienting. `inner`
+     and `outer` are fractions of the half-diagonal — everything inside
+     `inner` is left completely alone, which is what keeps the wanderer and
+     the ground under them from ever being mirrored. */
+  kaleidoscope: {
+    enabled: true,
+    amount: 0.20,
+    segments: 6,
+    speed: 0.010,            // radians/sec. This is meant to be barely a drift.
+    inner: 0.34,             // untouched out to here...
+    outer: 0.82,             // ...and fully folded past here
+    reducedScale: 0.4,       // multiplier under prefers-reduced-motion
+  },
 
   /* Third person, trailing the wanderer. The distance is the one number worth
      playing with: much under 5 and the figure fills the frame in portrait,
@@ -219,7 +235,17 @@ const CONFIG = {
     chord: [110.0, 164.81, 220.0, 246.94],
   },
 
-  mood: { periodSeconds: 420 },   // one full colour / density cycle
+  /* The slow colour drift. Every world's palette breathes between itself and
+     a warmer, slightly-shifted copy of itself over `periodSeconds`, so nothing
+     you look at for five minutes is ever quite the colour it was. Keep the
+     shifts small: this should be something you only notice by leaving. */
+  mood: {
+    periodSeconds: 420,      // one full colour cycle
+    hueShift: 0.035,         // how far round the wheel the far end of the cycle sits
+    satShift: 0.88,          // ...and what it does to saturation
+    lumShift: 1.10,          // ...and to lightness
+    applyEvery: 0.25,        // seconds between re-tints; this is not per-frame work
+  },
 
   /* Quality tiers. `pickTier` guesses from the device, then the frame watcher
      steps down if the guess was optimistic. Set `forceTier` to pin one. */
@@ -230,7 +256,7 @@ const CONFIG = {
       reflections: true, reflectionSize: 512, waterNormalSize: 256,
       groundCells: 128,
       fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
-      mengerDepth: 2, blockSegments: 3, cloudLayers: 3,
+      mengerDepth: 2, blockSegments: 3, cloudLayers: 3, kaleidoscope: true,
       charSegments: 22, charShadow: true,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
@@ -239,7 +265,7 @@ const CONFIG = {
       reflections: true, reflectionSize: 256, waterNormalSize: 128,
       groundCells: 96,
       fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
-      mengerDepth: 2, blockSegments: 2, cloudLayers: 2,
+      mengerDepth: 2, blockSegments: 2, cloudLayers: 2, kaleidoscope: true,
       charSegments: 16, charShadow: true,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
@@ -248,7 +274,7 @@ const CONFIG = {
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
       groundCells: 64,
       fractalDepth: 3, fractalInstances: 1600, structureScale: 0.6,
-      mengerDepth: 1, blockSegments: 1, cloudLayers: 1,
+      mengerDepth: 1, blockSegments: 1, cloudLayers: 1, kaleidoscope: false,
       charSegments: 11, charShadow: false,
       bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.25,
     },
@@ -305,7 +331,7 @@ function start() {
   const terrain  = createTerrain({ CONFIG, quality, scene });
   const rig      = createRig({ CONFIG, camera, terrain });
   let character  = createCharacter({ CONFIG, quality, scene });
-  let post       = createPost({ CONFIG, quality, renderer, scene, camera });
+  let post       = createPost({ CONFIG, quality, renderer, scene, camera, motion: cameraMotion });
 
   const audio = createAudio(CONFIG);
   const ui = createUI({ CONFIG, audio });
@@ -328,6 +354,7 @@ function start() {
   let worldIndex = -1;
   let world = null;
   let content = null;
+  let cyclePalette = null;
 
   function loadWorld(index) {
     worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
@@ -338,6 +365,7 @@ function start() {
 
     terrain.build(world);
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
+    cyclePalette = makePaletteCycler(p, CONFIG.mood);
 
     sky.setPalette(p);
     sky.setStars(world.stars);
@@ -409,7 +437,7 @@ function start() {
     lanterns = createLanterns({ CONFIG, quality, scene });
     fireflies = createFireflies({ CONFIG, quality, scene });
     character = createCharacter({ CONFIG, quality, scene });
-    post = createPost({ CONFIG, quality, renderer, scene, camera });
+    post = createPost({ CONFIG, quality, renderer, scene, camera, motion: cameraMotion });
 
     // ...and this rebuilds the ground, the fractals and the water, and
     // re-tints everything that was just replaced
@@ -437,9 +465,25 @@ function start() {
     breezes: input.breezes,
   };
 
+  /**
+   * Re-tint everything that drifts with the mood. The sky runs its own cycle
+   * off the same phase, so it is left out of this — colouring it twice makes
+   * the two cycles fight and the horizon wobbles.
+   */
+  function applyMood(mood) {
+    const p = cyclePalette(mood);
+    terrain.setPalette(p);
+    content.setPalette(p);
+    haze.setPalette(p);
+    fireflies.setPalette(p);
+    lanterns.setPalette(p);
+    character.setPalette(p);
+  }
+
   let last = performance.now();
   let time = 0;
   let ambientAt = 2;
+  let moodAt = 0;
 
   function frame(now) {
     const rawDt = now - last;
@@ -454,6 +498,14 @@ function start() {
     ctx.mood = 0.5 + 0.5 * Math.sin(phase);
     ctx.mood2 = 0.5 + 0.5 * Math.sin(phase * 0.61 + 1.1);
     ctx.dim = ui.update(dt, renderer);
+
+    // a few times a second, not every frame: the drift takes seven minutes to
+    // come round, so a quarter of a second of quantisation is invisible
+    moodAt -= dt;
+    if (moodAt <= 0) {
+      moodAt = CONFIG.mood.applyEvery;
+      applyMood(ctx.mood);
+    }
 
     updateWind(time);
     input.update(dt);
@@ -510,7 +562,10 @@ function start() {
     /** force the next quality step down, as the frame watcher would */
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
     renderer, scene, camera, rig, terrain,
+    get post() { return post; },
     get character() { return character; },
+    /** hold the colour drift at a point on its cycle, for looking at one end */
+    mood(v) { applyMood(v); return v; },
     get world() { return world.key; },
     get instances() { return content.instances; },
     get structures() { return content.structures; },

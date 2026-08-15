@@ -172,6 +172,42 @@ export const WORLDS = [
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   the slow colour drift
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Build a function that returns a world's palette somewhere between itself and
+ * a slightly-shifted copy of itself.
+ *
+ * Both ends are computed once, at world load, and the returned function only
+ * lerps — so the drift costs a handful of colour lerps a few times a second
+ * rather than an HSL round-trip per frame. The shifts want to stay small:
+ * anything you can catch happening reads as a colour effect, and the point is
+ * that you only notice by having looked away.
+ */
+export function makePaletteCycler(palette, mood) {
+  const a = {}, b = {}, out = {};
+  const hsl = { h: 0, s: 0, l: 0 };
+
+  for (const key of Object.keys(palette)) {
+    const from = new THREE.Color(palette[key]);
+    from.getHSL(hsl);
+    a[key] = from;
+    b[key] = new THREE.Color().setHSL(
+      (hsl.h + mood.hueShift + 1) % 1,
+      THREE.MathUtils.clamp(hsl.s * mood.satShift, 0, 1),
+      THREE.MathUtils.clamp(hsl.l * mood.lumShift, 0, 1)
+    );
+    out[key] = new THREE.Color();
+  }
+
+  return function at(t) {
+    for (const key in out) out[key].copy(a[key]).lerp(b[key], t);
+    return out;
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    building one
    ═══════════════════════════════════════════════════════════════════════════ */
 
