@@ -203,20 +203,33 @@ const CONFIG = {
     bloomSeconds: 5.5,       // how long it takes to come fully alight
     lightPower: 2.4,         // what an awake structure does to the ground
     lightRange: 32,
-    gateAt: 0.40,            // fraction awake before the gate is fully open
+    gateAt: 0.18,            // fraction awake before the gate is fully open
   },
 
   /* Dream-gates. `atRadius` is a fraction of the world radius, so a gate is
-     always a walk away but never out past the rim. */
+     always a walk away but never out past the rim. Openness is driven by
+     whichever the player is actually doing — waking structures *or* feeding
+     the monument — so either kind of wandering leads onward:
+     open ← max(awakeFraction / awaken.gateAt,
+                delivered / (motes.monumentTarget * gate.gatherAt)). */
   gate: {
-    atRadius: 0.60,
+    atRadius: 0.52,          // a shorter walk than it was
     radius: 2.8,             // the opening itself
     thickness: 0.16,
     lift: 0.25,              // how far off the ground the ring floats
     openRate: 0.5,           // damping rate as it opens; slow is the point
-    enterAt: 0.88,           // how open it has to be before it will take you
-    enterRadius: 2.4,
+    enterAt: 0.45,           // how open it has to be before it will take you
+    enterRadius: 4.2,        // generous: walking *at* it is enough
+    promptRadius: 9,         // this close to an open gate, offer "step through"
+    gatherAt: 0.45,          // fraction of a full monument that opens it fully
     clearing: 16,            // no structures grow this close to one
+    beacon: 1.0,             // strength of the skyward light once it is opening
+  },
+
+  /* Debug switches, all off in play. `freeTravel` opens every gate at once so
+     the whole loop can be walked without earning it. */
+  debug: {
+    freeTravel: false,
   },
 
   /* Wandering. Drag anywhere for a floating joystick, tap ahead of yourself to
@@ -412,6 +425,12 @@ function start() {
   });
   ui.onSettingsSave = saveSettings;
   ui.onBegin = () => ui.showWorldName(world.name, 1400);
+  ui.onStep = () => {
+    if (!ui.transitioning && gate && gate.enterable
+        && gate.distance2(rig.state.x, rig.state.z) < CONFIG.gate.promptRadius ** 2) {
+      enterGate();
+    }
+  };
 
   const input = createInput({
     CONFIG,
@@ -435,6 +454,7 @@ function start() {
   let gate = null;
   let cyclePalette = null;
   let delivered = 0;
+  let gateAnnounced = false;   // "a gate has opened" is said once per visit
 
   /* The journey: which world this is, what has been woken there, how many
      motes the monument has taken. Mirrored to localStorage so an accidental
@@ -470,6 +490,8 @@ function start() {
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
     gate = createGate({ CONFIG, scene, world, terrain });
     cyclePalette = makePaletteCycler(p, CONFIG.mood);
+    gateAnnounced = false;
+    ui.setStepPrompt(false);
 
     sky.setPalette(p);
     sky.setStars(world.stars);
@@ -606,6 +628,14 @@ function start() {
     }
   }
 
+  /** walk on to the next world, through the gate's soft light. The same path
+      serves the walked-into ring and the tapped "step through" prompt. */
+  function enterGate() {
+    const next = worldIndex + 1;
+    ui.setStepPrompt(false);
+    ui.transition(() => loadWorld(next));
+  }
+
   /** forget the journey and wake up back at the start, through the same
       soft light a dream-gate uses — resetting should feel like dreaming
       again, not like a page reload */
@@ -723,13 +753,29 @@ function start() {
     }
     content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
 
-    // the gate opens on how much of this world has come awake, and takes you
-    // on to the next one if you walk into it
-    gate.update(dt, ctx, content.awakeFraction / CONFIG.awaken.gateAt);
-    if (!ui.transitioning && gate.entered(rig.state.x, rig.state.z)) {
-      const next = worldIndex + 1;
-      ui.transition(() => loadWorld(next));
+    // The gate opens on whichever the player has actually been doing — waking
+    // structures or carrying motes to the monument — so either kind of
+    // wandering leads onward. Walking into it takes you to the next world.
+    const wantedOpen = CONFIG.debug.freeTravel ? 1 : Math.max(
+      content.awakeFraction / CONFIG.awaken.gateAt,
+      delivered / (CONFIG.motes.monumentTarget * CONFIG.gate.gatherAt)
+    );
+    gate.update(dt, ctx, wantedOpen);
+
+    // say so, quietly, the moment it would admit you
+    if (!gateAnnounced && gate.enterable) {
+      gateAnnounced = true;
+      if (ui.began) ui.announce('a gate has opened');
     }
+
+    // standing before an open gate, offer the step — travel must never depend
+    // on threading an exact radius from a moving thumb
+    ui.setStepPrompt(
+      !ui.transitioning && gate.enterable
+      && gate.distance2(rig.state.x, rig.state.z) < CONFIG.gate.promptRadius ** 2
+    );
+
+    if (!ui.transitioning && gate.entered(rig.state.x, rig.state.z)) enterGate();
 
     // the ground takes light from the motes and from whatever is awake, as
     // one list of the nearest few

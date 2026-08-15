@@ -11,6 +11,7 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const hintEl = document.getElementById('hint');
   const hint2El = document.getElementById('hint2');
   const worldNameEl = document.getElementById('worldname');
+  const stepEl = document.getElementById('step');
   const soundEl = document.getElementById('sound');
   const gearEl = document.getElementById('gear');
   const panelEl = document.getElementById('panel');
@@ -256,6 +257,24 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
         worldNameEl.classList.add('show');
         worldNameTimer = setTimeout(() => worldNameEl.classList.remove('show'), 5200);
       }, delayMs);
+    },
+
+    /** a quiet passing line — "a gate has opened" — in the world-name voice */
+    announce(text) {
+      this.showWorldName(text, 0);
+    },
+
+    /** offer or withdraw the "step through" prompt by an open gate */
+    setStepPrompt(visible) {
+      stepEl.classList.toggle('show', !!visible);
+    },
+
+    /** main installs what stepping through actually does */
+    set onStep(fn) {
+      stepEl.addEventListener('click', () => { touch(); fn?.(); });
+      stepEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); touch(); fn?.(); }
+      });
     },
 
     /** true while a gate transition is running */
