@@ -4,6 +4,7 @@ import {
   speciesGeometry, softBoxGeometry, growBranching, growMenger, growSpire,
   growRing, createFractalMesh, createClouds,
 } from './fractals.js';
+import { gateSpot } from './gate.js';
 
 /**
  * The worlds, and what it takes to stand one up.
@@ -232,6 +233,7 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
   const structures = [];
 
   const placed = [];
+  const gateAt = gateSpot(CONFIG, world);
   const S = world.structures;
   const minR = world.ground.plazaRadius * 1.35;
   const maxR = world.ground.radius * 0.80;
@@ -245,6 +247,9 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
     const r = minR + Math.sqrt(rand()) * (maxR - minR);
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
+
+    // leave the gate a clearing to stand in
+    if ((gateAt.x - x) ** 2 + (gateAt.z - z) ** 2 < CONFIG.gate.clearing ** 2) continue;
 
     let clear = true;
     for (const p of placed) {
@@ -275,7 +280,10 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
     });
 
     structures.push({
-      x, y, z,
+      x, z,
+      // the height the ground shader should treat this as a light at, once it
+      // is awake: up in the canopy, not down at the roots
+      y: y + height * 0.55,
       height,
       segStart, segCount: segments.length - segStart,
       tipStart, tipCount: tips.length - tipStart,
@@ -301,6 +309,7 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
       ground: world.palette.groundLow,
       fog: world.palette.fog,
       bloom: world.palette.bloom,
+      bloomGain: 0.30,          // the body of a structure only warms
       ambient: 0.80,
     },
   });
@@ -319,6 +328,7 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
       ground: world.palette.groundLow,
       fog: world.palette.fog,
       bloom: world.palette.bloom,
+      bloomGain: 1.0,           // ...and the tips are what actually light up
       ambient: 0.95,
     },
   });
@@ -353,6 +363,7 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
       ground: world.palette.groundLow,
       fog: world.palette.fog,
       bloom: world.palette.bloom,
+      bloomGain: 0.55,
       ambient: 0.9,
     },
   });
@@ -363,17 +374,30 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
   const clouds = createClouds({ CONFIG, scene, world, count: quality.cloudLayers });
 
   let spin = 0;
+  let awake = 0;
+  let growth = 0;
+
+  // where gathered motes go, and where the monument's own light sits
+  const monumentPoint = new THREE.Vector3(0, mBase + mSize * 1.05, 0);
+  const nearAwake = [];
 
   return {
     world,
     structures,
     monument,
+    monumentPoint,
     segMesh,
     tipMesh,
 
     /** total instances standing in this world, for the console readout */
     get instances() {
       return segments.length + tips.length + monumentParts.length;
+    },
+
+    /** how many structures have been woken, and what fraction that is */
+    get awake() { return awake; },
+    get awakeFraction() {
+      return structures.length ? awake / structures.length : 0;
     },
 
     /**
@@ -392,11 +416,70 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
       tipMesh.bloom.needsUpdate = true;
     },
 
-    /** how lit the monument is, 0..1 — it brightens as motes arrive */
-    setMonumentGlow(value) {
+    /**
+     * How full the monument is, 0..1. It brightens and stands a little taller
+     * as motes arrive — the growth is small on purpose, because a monument
+     * that visibly doubles turns a quiet reward into a progress bar.
+     */
+    setMonumentGrowth(value) {
+      growth = THREE.MathUtils.clamp(value, 0, 1);
       const arr = monument.bloom.array;
-      for (let i = 0; i < arr.length; i++) arr[i] = value;
+      const lit = growth * 0.85;
+      for (let i = 0; i < arr.length; i++) arr[i] = lit;
       monument.bloom.needsUpdate = true;
+      monument.mesh.scale.setScalar(0.80 + 0.20 * growth);
+    },
+
+    /**
+     * Wake anything the wanderer has walked near, and carry on lighting
+     * whatever is already waking. Awakening is one-way for the visit: a
+     * structure that is lit stays lit however far away you go.
+     *
+     * @param onAwaken called once, the moment a structure starts to wake
+     */
+    updateAwakening(dt, x, z, onAwaken) {
+      const R = CONFIG.awaken.radius;
+      const R2 = R * R;
+      for (let i = 0; i < structures.length; i++) {
+        const s = structures[i];
+
+        if (!s.awake) {
+          const dx = s.x - x, dz = s.z - z;
+          if (dx * dx + dz * dz > R2) continue;
+          s.awake = true;
+          awake++;
+          onAwaken?.(i, s);
+        }
+
+        if (s.bloom < 1) {
+          const next = Math.min(1, s.bloom + dt / CONFIG.awaken.bloomSeconds);
+          this.setBloom(i, next);
+          s.vis = next;
+          s.glow = next * CONFIG.awaken.lightPower;
+        }
+      }
+    },
+
+    /**
+     * Awake structures near a point, for the ground shader. Appends into
+     * `out` so the caller can merge them with the motes in one list.
+     */
+    nearestAwake(point, k, out) {
+      nearAwake.length = 0;
+      const range2 = CONFIG.awaken.lightRange * CONFIG.awaken.lightRange;
+      for (const s of structures) {
+        if (s.bloom <= 0.02) continue;
+        const dx = s.x - point.x, dy = s.y - point.y, dz = s.z - point.z;
+        s.dist2 = dx * dx + dy * dy + dz * dz;
+        if (s.dist2 > range2) continue;
+        let at = nearAwake.length;
+        while (at > 0 && nearAwake[at - 1].dist2 > s.dist2) at--;
+        if (at >= k) continue;
+        nearAwake.splice(at, 0, s);
+        if (nearAwake.length > k) nearAwake.length = k;
+      }
+      for (const s of nearAwake) out.push(s);
+      return out;
     },
 
     setPalette(p) {

@@ -377,6 +377,11 @@ export function createFractalMesh({ parts, geometry, palette, fogDensity, sway =
     uFogDensity: { value: fogDensity },
     uBloomColor: { value: new THREE.Color(palette.bloom) },
     uAmbient:    { value: palette.ambient ?? 0.8 },
+    // How hard *this* mesh reacts to waking up. Trunks barely, tips fully:
+    // lighting a whole structure evenly blows the frame out to white, and
+    // what actually reads as "it came alive" is the ends glowing while the
+    // body underneath stays a body.
+    uBloomGain:  { value: palette.bloomGain ?? 1.0 },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -414,7 +419,7 @@ export function createFractalMesh({ parts, geometry, palette, fogDensity, sway =
       }`,
     fragmentShader: /* glsl */`
       uniform vec3 uSky, uGroundTint, uFogColor, uBloomColor;
-      uniform float uFogDensity, uAmbient;
+      uniform float uFogDensity, uAmbient, uBloomGain;
 
       varying vec3 vTint, vNormal, vWorld;
       varying float vBloom, vLevel, vDepth;
@@ -432,10 +437,11 @@ export function createFractalMesh({ parts, geometry, palette, fogDensity, sway =
         float rim = pow(1.0 - max(dot(n, v), 0.0), 2.4);
         col += uSky * rim * 0.35;
 
-        // Awake. Pushed well past 1.0 on purpose — this is the one thing in
-        // the scene that is meant to drive the bloom pass by itself, so that
-        // a structure coming alive reads as light and not as a colour change.
-        col += uBloomColor * vBloom * (0.55 + 1.5 * vLevel);
+        // Awake. Pushed past 1.0 on purpose — this is the one thing in the
+        // scene meant to drive the bloom pass by itself, so that a structure
+        // coming alive reads as light and not as a colour change. Past about
+        // 1.4 here it stops being light and becomes a white hole.
+        col += uBloomColor * vBloom * uBloomGain * (0.30 + 0.95 * vLevel);
 
         float fog = 1.0 - exp(-pow(vDepth * uFogDensity, 2.0));
         gl_FragColor = vec4(mix(col, uFogColor, fog), 1.0);

@@ -7,4 +7,4 @@ dist
 
 # local render smoke tests (playwright installed ad hoc, not a project dep)
 smoke.mjs
-dbg.mjs
+dbg*.mjs

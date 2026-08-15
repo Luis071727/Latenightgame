@@ -3,11 +3,12 @@ import * as THREE from 'three';
 import { pickTier, lowerTier, FrameWatch } from './quality.js';
 import { createSky } from './sky.js';
 import { createWater } from './water.js';
-import { createLanterns } from './lanterns.js';
+import { createMotes } from './motes.js';
 import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
 import { createTerrain } from './terrain.js';
 import { WORLDS, createWorldContent, makePaletteCycler } from './worlds.js';
+import { createGate } from './gate.js';
 import { createRig } from './rig.js';
 import { createCharacter } from './character.js';
 import { createPost } from './post.js';
@@ -158,26 +159,61 @@ const CONFIG = {
 
   stars: { count: 1500, brightness: 0.62, drift: 0.0055, twinkleSpeed: 0.35 },
 
-  lanterns: {
-    baseSize: 0.75,          // a tapped lantern
-    sizeRange: 1.25,         // ...plus this much for a fully-held one
-    riseSpeed: 0.55,         // units/sec
-    riseSpeedBig: 0.34,      // held lanterns are heavier and climb slower
-    sway: 0.16,
-    // Emissive multiplier for the paper. Kept modest on purpose: push it much
-    // past ~1.4 and the tone curve clips the amber toward white.
-    glow: 1.15,
-    glowRadius: 2.3,         // glow card size, relative to the lantern
-    glowPower: 0.40,         // brightness of the flame's core + halo
-    drag: 0.55,              // per-second velocity decay back to stillness
-    fadeStartY: 30,
-    fadeEndY: 66,
-    despawnDistance: 260,    // recycled once this far from the camera
-    lightRange: 26,          // how far a lantern's light reaches onto the ground
-    // Nothing releases lanterns by hand any more; each world seeds its own
-    // while the gathering loop is being built. Phase 4 replaces this wholesale.
-    ambientInterval: 5.5,    // seconds between one drifting up on its own
-    ambientRadius: 55,
+  /* Light-motes: the things you gather just by walking near them.
+     `gatherRadius` is the whole difficulty curve — it wants to be generous
+     enough that you collect them without aiming. `monumentTarget` is how many
+     have to arrive for the monument to be full. */
+  motes: {
+    size: 0.44,
+    glow: 1.20,              // emissive multiplier; much past ~1.6 clips to white
+    glowRadius: 3.0,         // halo card size, relative to the mote
+    glowPower: 0.32,
+    gatheredGlow: 1.55,      // a mote brightens once it is following you
+    bob: 0.55,               // how far a free mote drifts up and down
+    drag: 0.50,              // per-second velocity decay back to stillness
+
+    gatherRadius: 4.5,       // walk this close and it comes with you
+    attractRadius: 11,       // ...and from this far it starts leaning your way
+    attractPull: 1.8,        // units/sec² of that lean, at its strongest
+    trail: 2.1,              // how far behind the wanderer the ring sits
+    trailHeight: 1.45,
+    orbitRadius: 0.85,       // ...and how wide it is
+    orbitSpeed: 0.65,        // radians/sec around that ring
+    follow: 2.0,             // damping rate of a gathered mote
+
+    holdSeconds: 24,         // after this long they let go and head home
+    deliverRadius: 17,       // ...or immediately, this close to the monument
+    streamRate: 0.55,        // damping rate on the way in — deliberately slow
+    arriveRadius: 1.8,
+
+    lightRange: 24,          // how far a mote's light reaches onto the ground
+    perWorld: 30,            // how many drift at once, budget permitting
+    respawnSeconds: 3.4,     // ...and how often a gap is filled
+    spawnNear: 14, spawnFar: 48,
+    monumentTarget: 24,      // arrivals for a full monument
+  },
+
+  /* Awakening. Nothing here can fail or expire: a structure that has started
+     to wake finishes waking, and stays awake for the rest of the visit. */
+  awaken: {
+    radius: 8.0,             // how close is close enough
+    bloomSeconds: 5.5,       // how long it takes to come fully alight
+    lightPower: 2.4,         // what an awake structure does to the ground
+    lightRange: 32,
+    gateAt: 0.40,            // fraction awake before the gate is fully open
+  },
+
+  /* Dream-gates. `atRadius` is a fraction of the world radius, so a gate is
+     always a walk away but never out past the rim. */
+  gate: {
+    atRadius: 0.60,
+    radius: 2.8,             // the opening itself
+    thickness: 0.16,
+    lift: 0.25,              // how far off the ground the ring floats
+    openRate: 0.5,           // damping rate as it opens; slow is the point
+    enterAt: 0.88,           // how open it has to be before it will take you
+    enterRadius: 2.4,
+    clearing: 16,            // no structures grow this close to one
   },
 
   /* Wandering. Drag anywhere for a floating joystick, tap ahead of yourself to
@@ -226,13 +262,29 @@ const CONFIG = {
     sleepFadeSeconds: 50,
     wakeFadeSeconds: 2.5,
     wakeLock: true,
+    // walking through a gate: up into light, swap, back down. Out is slower
+    // than in on purpose — arriving should feel like a long exhale.
+    gateInSeconds: 1.7,
+    gateHoldSeconds: 0.45,
+    gateOutSeconds: 2.6,
   },
 
+  /* Layered generative pads. The drone and the wash are always there; the
+     layers come up one at a time as the world wakes, so how full it sounds is
+     how much of it you have found. Every per-world value here is overwritten
+     from that world's `audio` block on arrival. */
   audio: {
     enabled: true,
     volume: 0.16,            // intentionally very quiet
     fadeInSeconds: 8,
-    chord: [110.0, 164.81, 220.0, 246.94],
+    root: 110.0,             // fallback; each world names its own
+    chord: [0, 3, 7, 10, 12],// semitone offsets, likewise
+    brightness: 420,         // lowpass cutoff on the drone, in Hz
+    droneVoices: 3,
+    layers: 7,               // how many awakenings are audible as new notes
+    layerGain: 0.16,
+    layerFadeSeconds: 7,     // a layer arriving must never be an event
+    glideSeconds: 2.5,       // how long a world change takes to slide pitch
   },
 
   /* The slow colour drift. Every world's palette breathes between itself and
@@ -252,7 +304,7 @@ const CONFIG = {
   forceTier: null,           // 'low' | 'medium' | 'high' | null
   tiers: {
     high: {
-      maxLanterns: 40, starScale: 1.0, particleScale: 1.0,
+      maxMotes: 48, starScale: 1.0, particleScale: 1.0,
       reflections: true, reflectionSize: 512, waterNormalSize: 256,
       groundCells: 128,
       fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
@@ -261,7 +313,7 @@ const CONFIG = {
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
-      maxLanterns: 30, starScale: 0.7, particleScale: 0.8,
+      maxMotes: 34, starScale: 0.7, particleScale: 0.8,
       reflections: true, reflectionSize: 256, waterNormalSize: 128,
       groundCells: 96,
       fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
@@ -270,7 +322,7 @@ const CONFIG = {
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
-      maxLanterns: 20, starScale: 0.45, particleScale: 0.6,
+      maxMotes: 22, starScale: 0.45, particleScale: 0.6,
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
       groundCells: 64,
       fractalDepth: 3, fractalInstances: 1600, structureScale: 0.6,
@@ -325,7 +377,7 @@ function start() {
   /* ── scene systems ─────────────────────────────────────────────────── */
   let sky        = createSky({ CONFIG, quality, scene });
   let water      = null;               // only the worlds that have any
-  let lanterns   = createLanterns({ CONFIG, quality, scene });
+  let motes      = createMotes({ CONFIG, quality, scene });
   let fireflies  = createFireflies({ CONFIG, quality, scene });
   let haze       = createHaze({ CONFIG, scene });
   const terrain  = createTerrain({ CONFIG, quality, scene });
@@ -354,7 +406,9 @@ function start() {
   let worldIndex = -1;
   let world = null;
   let content = null;
+  let gate = null;
   let cyclePalette = null;
+  let delivered = 0;
 
   function loadWorld(index) {
     worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
@@ -362,9 +416,11 @@ function start() {
     const p = world.palette;
 
     if (content) content.dispose();
+    if (gate) gate.dispose();
 
     terrain.build(world);
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
+    gate = createGate({ CONFIG, scene, world, terrain });
     cyclePalette = makePaletteCycler(p, CONFIG.mood);
 
     sky.setPalette(p);
@@ -372,10 +428,17 @@ function start() {
     haze.setPalette(p);
     fireflies.setPalette(p);
     fireflies.setDensity(world.fireflies);
-    lanterns.setPalette(p);
+    motes.setPalette(p);
+    motes.setFogDensity(world.fog.density);
+    motes.clear();
     character.setPalette(p);
     character.setFogDensity(world.fog.density);
     renderer.setClearColor(p.fog, 1);
+    ui.setFlashColor(p.bloom);
+    audio.setWorld(world.audio);
+
+    delivered = 0;
+    content.setMonumentGrowth(0);
 
     // water is per-world: most of them have none at all
     if (water) { water.dispose(); water = null; }
@@ -383,6 +446,23 @@ function start() {
 
     // arrive out on the plaza, facing the monument in the middle
     rig.place(0, world.ground.plazaRadius * 2.4, 0);
+
+    // a first handful of motes already drifting, so the world is never empty
+    for (let i = 0; i < Math.min(CONFIG.motes.perWorld, quality.maxMotes) * 0.6; i++) {
+      spawnMote();
+    }
+  }
+
+  /** Drop one free mote somewhere in the world, at a walkable distance. */
+  function spawnMote() {
+    const M = CONFIG.motes;
+    const a = Math.random() * Math.PI * 2;
+    const r = M.spawnNear + Math.random() * (M.spawnFar - M.spawnNear);
+    const x = rig.state.x + Math.cos(a) * r;
+    const z = rig.state.z + Math.sin(a) * r;
+    // keep them inside the world; anything past the rim is over the edge
+    if (Math.hypot(x, z) > terrain.radius * 0.92) return;
+    motes.spawn(x, terrain.heightAt(x, z) + 1.1 + Math.random() * 1.6, z);
   }
 
   /* ── resize ────────────────────────────────────────────────────────── */
@@ -429,12 +509,12 @@ function start() {
     // rather than patched because its instance counts are baked at build time
     // — and a world rebuilt in place is a fraction of a second where a
     // permanent stutter would otherwise be.
-    lanterns.dispose();
+    motes.dispose();
     fireflies.dispose();
     character.dispose();
     post.dispose();
 
-    lanterns = createLanterns({ CONFIG, quality, scene });
+    motes = createMotes({ CONFIG, quality, scene });
     fireflies = createFireflies({ CONFIG, quality, scene });
     character = createCharacter({ CONFIG, quality, scene });
     post = createPost({ CONFIG, quality, renderer, scene, camera, motion: cameraMotion });
@@ -476,9 +556,15 @@ function start() {
     content.setPalette(p);
     haze.setPalette(p);
     fireflies.setPalette(p);
-    lanterns.setPalette(p);
+    motes.setPalette(p);
     character.setPalette(p);
+    gate.setPalette(p);
   }
+
+  // the ground's light list, rebuilt each frame from two sources and never
+  // reallocated
+  const lights = [];
+  const byDistance = (a, b) => a.dist2 - b.dist2;
 
   let last = performance.now();
   let time = 0;
@@ -520,23 +606,44 @@ function start() {
     rig.update(dt, time, cameraMotion);
     character.update(dt, ctx, rig.state);
 
-    // each world seeds its own drifting lights for now; the gathering loop
-    // replaces this in a later pass
-    ambientAt -= dt;
-    if (ambientAt <= 0) {
-      ambientAt = CONFIG.lanterns.ambientInterval * (0.6 + Math.random() * 0.8);
-      const a = Math.random() * Math.PI * 2;
-      const r = 12 + Math.random() * CONFIG.lanterns.ambientRadius;
-      const lx = rig.state.x + Math.cos(a) * r;
-      const lz = rig.state.z + Math.sin(a) * r;
-      lanterns.release(lx, lz, Math.random() * 0.5, terrain.heightAt(lx, lz));
+    /* ── the loop: wake things, gather things, walk through ──────────── */
+
+    // Anything the wanderer has come near starts to wake, and each one that
+    // does brings up one more layer of the pad. Suspended during a transition,
+    // or arriving somewhere would light whatever happened to be near the spot.
+    if (!ui.transitioning) {
+      content.updateAwakening(dt, rig.state.x, rig.state.z, () => audio.addLayer());
     }
 
-    terrain.setLights(lanterns.nearestTo(camera.position, CONFIG.ground.lights));
+    // top the motes back up, slowly, so a world never runs out of them
+    ambientAt -= dt;
+    if (ambientAt <= 0) {
+      ambientAt = CONFIG.motes.respawnSeconds * (0.7 + Math.random() * 0.6);
+      if (motes.count < Math.min(CONFIG.motes.perWorld, quality.maxMotes)) spawnMote();
+    }
+
+    delivered += motes.update(dt, ctx, rig.state, content.monumentPoint);
+    content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
+
+    // the gate opens on how much of this world has come awake, and takes you
+    // on to the next one if you walk into it
+    gate.update(dt, ctx, content.awakeFraction / CONFIG.awaken.gateAt);
+    if (!ui.transitioning && gate.entered(rig.state.x, rig.state.z)) {
+      const next = worldIndex + 1;
+      ui.transition(() => loadWorld(next));
+    }
+
+    // the ground takes light from the motes and from whatever is awake, as
+    // one list of the nearest few
+    lights.length = 0;
+    for (const m of motes.nearestTo(camera.position, CONFIG.ground.lights)) lights.push(m);
+    content.nearestAwake(camera.position, CONFIG.ground.lights, lights);
+    lights.sort(byDistance);
+    if (lights.length > CONFIG.ground.lights) lights.length = CONFIG.ground.lights;
+    terrain.setLights(lights);
 
     sky.update(dt, ctx);
     if (water) water.update(dt, ctx);
-    lanterns.update(dt, ctx);
     fireflies.update(dt, ctx);
     haze.update(dt, ctx);
     content.update(dt, ctx);
@@ -554,21 +661,42 @@ function start() {
   });
 
   // Exposed for tuning from the console. CONFIG is read live every frame, so
-  // e.g. __night.CONFIG.lanterns.riseSpeed = 1.2 takes effect immediately.
+  // e.g. __night.CONFIG.movement.maxSpeed = 4 takes effect immediately.
   window.__night = {
     CONFIG,
     get tier() { return tierName; },
-    get lanterns() { return lanterns.count; },
     /** force the next quality step down, as the frame watcher would */
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
     renderer, scene, camera, rig, terrain,
     get post() { return post; },
     get character() { return character; },
+    get gate() { return gate; },
+    get motes() { return motes; },
+    /** wake the whole world at once, for looking at what that does */
+    wakeAll() {
+      const was = CONFIG.awaken.radius;
+      CONFIG.awaken.radius = 1e6;
+      content.updateAwakening(0, rig.state.x, rig.state.z, () => audio.addLayer());
+      CONFIG.awaken.radius = was;
+      return content.awake;
+    },
     /** hold the colour drift at a point on its cycle, for looking at one end */
     mood(v) { applyMood(v); return v; },
     get world() { return world.key; },
     get instances() { return content.instances; },
     get structures() { return content.structures; },
+    /** where the loop currently stands, for tuning it without playing it */
+    get progress() {
+      return {
+        awake: content.awake,
+        of: content.structures.length,
+        gate: +gate.open.toFixed(2),
+        motes: motes.count,
+        held: motes.held,
+        delivered,
+        layers: audio.layers,
+      };
+    },
     /** step to a world by index or by key, for looking at one on purpose */
     go(which) {
       const i = typeof which === 'number'

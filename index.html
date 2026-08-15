@@ -118,6 +118,9 @@
     will-change: transform;
   }
 
+  /* the soft light a dream-gate fades through */
+  #flash { position: fixed; inset: 0; background: #cfc4e8; opacity: 0; pointer-events: none; }
+
   /* sleep fade veil */
   #veil { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; }
 
@@ -142,6 +145,7 @@
   <svg viewBox="0 0 24 24" class="off" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 10l4 4M20 10l-4 4"/></svg>
 </div>
 
+<div id="flash"></div>
 <div id="veil"></div>
 <div id="nogl"><p>This scene needs WebGL, which this browser doesn&rsquo;t seem to have available.</p></div>
 
