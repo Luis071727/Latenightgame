@@ -16,7 +16,9 @@ import {
  * the single most effective thing in the game at making someone go and look,
  * and it costs nothing and pressures no one.
  */
-export function createJournal({ archive, worlds, onClose, onEquip }) {
+export function createJournal({
+  archive, worlds, leaderboard, profiles, onClose, onEquip, onTab,
+}) {
   const root = document.getElementById('journal');
   const bodyEl = root.querySelector('.j-body');
   const tabsEl = root.querySelector('.j-tabs');
@@ -30,6 +32,7 @@ export function createJournal({ archive, worlds, onClose, onEquip }) {
     ['worlds', 'worlds'],
     ['memories', 'memories'],
     ['wanderer', 'wanderer'],
+    ['beside', 'beside'],
   ];
 
   for (const [id, label] of TABS) {
@@ -44,6 +47,7 @@ export function createJournal({ archive, worlds, onClose, onEquip }) {
     const b = e.target.closest('button[data-tab]');
     if (!b) return;
     tab = b.dataset.tab;
+    onTab?.(tab);
     render();
   });
 
@@ -260,6 +264,49 @@ export function createJournal({ archive, worlds, onClose, onEquip }) {
     return block;
   }
 
+  /* ── beside ──────────────────────────────────────────────────────────
+   *
+   * Comparison, written as a gallery rather than a ranking. There is no
+   * position number anywhere in here and nothing says how far behind anyone
+   * is, because a bedtime game that can tell you that you are losing has
+   * stopped being one. What it does say is what other journeys looked like,
+   * which is the same curiosity the memories tab runs on.
+   */
+  function renderBeside() {
+    const out = el('j-page');
+
+    out.appendChild(el('j-quiet',
+      'A quiet place to compare journeys. Nothing here is a race, '
+      + 'and nobody is keeping score.'));
+
+    if (!leaderboard) return out;
+
+    // rendered from the promise; the panel is DOM and can wait a tick
+    leaderboard.all().then((boards) => {
+      if (tab !== 'beside') return;
+      for (const b of boards) {
+        const block = el('j-block');
+        block.appendChild(el('j-label', b.category.name));
+        block.appendChild(el('j-note', b.category.note));
+
+        for (const e of b.entries) {
+          const r = el('j-beside' + (e.me ? ' me' : ''));
+          r.appendChild(el('j-beside-n', e.name));
+          r.appendChild(el('j-beside-v', e.display));
+          block.appendChild(r);
+        }
+        out.appendChild(block);
+      }
+      if (boards[0]?.local) {
+        out.appendChild(el('j-quiet',
+          'These other wanderers are examples, kept on this device. '
+          + 'Nothing about your journey has been sent anywhere.'));
+      }
+    });
+
+    return out;
+  }
+
   /* ── rendering ───────────────────────────────────────────────────────── */
 
   function render() {
@@ -272,6 +319,7 @@ export function createJournal({ archive, worlds, onClose, onEquip }) {
       tab === 'worlds' ? renderWorlds()
       : tab === 'memories' ? renderMemories()
       : tab === 'wanderer' ? renderWanderer()
+      : tab === 'beside' ? renderBeside()
       : renderJourney()
     );
   }

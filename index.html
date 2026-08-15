@@ -618,6 +618,19 @@
   .j-mem.r-dream .j-mem-rar  { color: rgba(255, 200, 150, 0.8); }
   .j-mem.r-mythic .j-mem-rar { color: rgba(255, 190, 130, 0.95); }
 
+  /* comparison rows: no rank number, no position, nothing lost */
+  .j-beside {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 14px;
+    padding: 9px 12px; border-radius: 11px;
+  }
+  .j-beside.me { background: rgba(255, 214, 168, 0.08); }
+  .j-beside-n {
+    font: 300 12px/1.5 var(--sans); font-style: italic;
+    color: var(--ink-soft); min-width: 0;
+  }
+  .j-beside.me .j-beside-n { color: var(--accent); font-style: normal; letter-spacing: 0.14em; }
+  .j-beside-v { font: 300 13px/1.4 var(--serif); color: var(--ink); flex: none; }
+
   .j-picker { display: flex; flex-direction: column; gap: 7px; }
   .j-pick {
     appearance: none; -webkit-appearance: none;

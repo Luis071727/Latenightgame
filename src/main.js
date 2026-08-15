@@ -20,6 +20,8 @@ import { loadSettings, saveSettings } from './save.js';
 import { createArchive } from './archive.js';
 import { createFragments } from './fragments.js';
 import { createJournal } from './journal.js';
+import { createAnalytics, EVENTS } from './analytics.js';
+import { createProfileService, createLeaderboardService } from './leaderboard.js';
 import { RARITY, title, cosmetic } from './discoveries.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -507,6 +509,11 @@ function start() {
      it, so a returning player arrives partway along rather than at zero.
      Built before anything else because the UI, the world loader and the
      wanderer's own colours all ask it questions. */
+  // No provider is installed, so this is a ring buffer nobody reads — the
+  // shape of the instrumentation without a tracker in the deploy.
+  const analytics = createAnalytics();
+  analytics.track(EVENTS.sessionStart, {});
+
   const archive = createArchive({
     worlds: WORLDS,
     monumentTarget: CONFIG.motes.monumentTarget,
@@ -558,6 +565,7 @@ function start() {
     ui.showMemory('collection complete', c.name,
       'Every piece of it found.', 'rare');
     audio.addLayer();
+    analytics.track(EVENTS.collectionCompleted, { id: c.id, world: c.world });
   };
   archive.onUnlock = ({ type, id }) => {
     const c = type === 'title' ? title(id) : cosmetic(type, id);
@@ -566,8 +574,10 @@ function start() {
       : type === 'monument' ? 'the monument answers'
       : `new ${type}`;
     ui.showMemory(kind, c.name, c.note || '', 'dream');
+    analytics.track(EVENTS.cosmeticUnlocked, { type, id });
   };
   archive.onMastery = ({ world: key, at }) => {
+    analytics.track(EVENTS.masteryReached, { world: key, at });
     if (at < 1) return;    // the quarters are told by what they unlock
     const w = WORLDS.find((x) => x.key === key);
     ui.showMemory('world known', w ? w.name : key,
@@ -579,10 +589,20 @@ function start() {
   const journal = createJournal({
     archive,
     worlds: WORLDS,
+    leaderboard: createLeaderboardService({ archive }),
+    profiles: createProfileService({ archive }),
     onClose: () => ui.keepAwake(),
-    onEquip: () => ui.keepAwake(),
+    onEquip: (kind, id) => {
+      ui.keepAwake();
+      analytics.track(EVENTS.cosmeticEquipped, { kind, id });
+    },
+    onTab: (t) => analytics.track(
+      t === 'wanderer' ? EVENTS.profileOpened : EVENTS.archiveOpened, { tab: t }),
   });
-  ui.onArchive = () => journal.show();
+  ui.onArchive = () => {
+    analytics.track(EVENTS.archiveOpened, {});
+    journal.show();
+  };
 
   ui.onSettingsSave = saveSettings;
   ui.onBegin = () => ui.showWorldName(world.name, 1400);
@@ -676,6 +696,9 @@ function start() {
     fragments.onFound = onDiscovery;
     content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
     content.setMasteryForm(archive.monumentForm(world.key));
+
+    analytics.track(EVENTS.worldEntered,
+      { world: world.key, visits: visited.visits });
 
     // name the place as it comes into view — held back so it arrives with the
     // gate-light still clearing, not on top of it
@@ -806,6 +829,8 @@ function start() {
     if (!rec) return;
 
     ui.showMemory('new memory', d.name, d.note, d.rarity);
+    analytics.track(EVENTS.discoveryFound,
+      { id: d.id, world: d.world, rarity: d.rarity });
     character.flare();
     companion?.notice(it.x, it.y, it.z);
     // a rarer find brings the world up a layer with it
@@ -818,6 +843,7 @@ function start() {
       serves the walked-into ring and the tapped "step through" prompt. */
   function enterGate() {
     const next = worldIndex + 1;
+    analytics.track(EVENTS.gateEntered, { from: world.key });
     ui.setStepPrompt(false);
     ui.transition(() => loadWorld(next));
   }
@@ -1063,6 +1089,7 @@ function start() {
     settings,
     archive,
     get summary() { return archive.summary(); },
+    analytics,
     get tier() { return tierName; },
     /** jump to any tier by name, exactly as the settings panel would */
     setTier(name) { applyQualityChoice(name); return tierName; },

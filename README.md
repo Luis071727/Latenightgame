@@ -34,6 +34,30 @@ Everything else happens by being near it:
   works. The screen fades up into soft light, the next world is built while
   nothing can be seen, and it fades back down. Worlds recur, so it never ends.
 
+### The Dream Archive
+
+Wandering now leaves something behind. Each world holds eight **memories** —
+named, written, and placed by that world's own seed, so a thing is in the same
+spot on every visit and every device. Nothing marks them: a memory notices you
+from twenty metres out and brightens, the companion goes to look, and the
+wanderer's eyes find it a moment before you do. Walk up to one and it comes to
+you. Taken memories are never placed again, so a world you have picked clean
+holds nothing and a world you half-know holds exactly what you missed.
+
+Thirty-two memories exist. Some are locked behind a condition — enough of a
+world awake, enough motes delivered, a second visit, another memory found
+first — and the journal says only that *something has to be true first*.
+
+Finding them completes **sets**, deepens **mastery** of each world, and unlocks
+cloaks, companions, titles and monument forms. Mastery is not an XP bar: it is
+computed from structures woken, memories found and motes delivered, and the
+monument in each world visibly stands further along the better you know it.
+
+Everything opens from **the dream archive** in the settings: the journey
+entire, the four worlds, every memory there is, the wanderer themself, and a
+quiet **beside** view for comparing journeys. Nothing there is ranked, nothing
+expires, and nothing is lost by staying away.
+
 The wanderer has two soft lights in their hood that blink and glance at
 whatever the world has just offered, breathe and shift their weight when
 standing still, and carry a chest light that flares when a mote is gathered and
@@ -136,6 +160,11 @@ __night.perf                                // fps, draw calls, triangles, insta
 __night.journey                             // what the save file currently remembers
 __night.settings                            // what the settings panel currently holds
 __night.CONFIG.debug.freeTravel = true      // open every gate at once
+__night.summary                             // the whole journey, in numbers
+__night.archive.mastery('meadow')           // how well one world is known
+__night.toFragment()                        // walk to the nearest unfound memory
+__night.journal.show('memories')            // open the archive at a tab
+__night.analytics.recent                    // what has been emitted this session
 __night.CONFIG.movement.paceScale = 1.8     // faster than any pace preset
 __night.companion                           // the little light, or null on saver
 ```
@@ -229,6 +258,12 @@ src/fractals.js     bounded recursion, instancing, fbm, cloud sheets
 src/terrain.js      the ground heightfield, its shader, and heightAt()
 src/character.js    the wanderer: one lathe, a swaying hem, eyes, idle life
 src/companion.js    the small light that keeps them company
+src/discoveries.js  what there is to find, and what finding it earns (all data)
+src/archive.js      the Dream Archive: found, mastery, unlocks, save migration
+src/fragments.js    the memories as objects in the ground, instanced
+src/journal.js      the archive as a page (DOM, only renders when open)
+src/leaderboard.js  profile + comparison behind a service interface, local mock
+src/analytics.js    event names and a ring buffer; no provider, no network
 src/rig.js          where the wanderer is, and the camera trailing them
 src/input.js        floating joystick, tap-to-move, keyboard
 src/motes.js        one InstancedMesh for every light-mote
