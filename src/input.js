@@ -30,10 +30,6 @@ export function createInput({ CONFIG, camera, domElement, onWake }) {
   const camForward = new THREE.Vector3();
   const dir = new THREE.Vector3();
 
-  // kept only so systems written against the old breeze field keep working;
-  // nothing lays down puffs any more
-  const breezes = [];
-
   function showStick(x, y) {
     if (!stickEl) return;
     stickEl.style.transform = `translate(${x}px, ${y}px)`;
@@ -146,8 +142,6 @@ export function createInput({ CONFIG, camera, domElement, onWake }) {
   document.addEventListener('contextmenu', stop);
 
   return {
-    breezes,
-
     /**
      * Drain the steering gathered since the last frame.
      * @returns {{x:number, z:number, strength:number}} a world-space direction

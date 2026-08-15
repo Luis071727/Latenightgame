@@ -40,8 +40,8 @@ const CONFIG = {
     groundHigh:  0x6f7290,
     waterDeep:   0x232a44,
     waterFar:    0x1a1e34,   // used by the low-tier water only
-    lanternWarm: 0xffd2a0,   // core of a mote
-    lanternCool: 0xffb98a,   // the other end of the mote tint range
+    mote:        0xffd2a0,   // the core of a light-mote
+    bloom:       0xffe2c0,   // ...and what an awake thing glows
     firefly:     0xc4c8f0,
     haze:        0x4a4670,
 
@@ -233,14 +233,6 @@ const CONFIG = {
     edgePull: 9.0,           // units/sec² of that lean, at the very edge
   },
 
-  breeze: {
-    power: 1.1,              // drag acceleration, units/sec²
-    radius: 9.0,
-    decay: 1.8,              // seconds for a puff to die out
-    maxDrift: 0.55,          // ceiling on sideways speed, units/sec
-    maxPuffs: 8,
-  },
-
   wind: { strength: 0.10 },
 
   fireflies: { count: 14, brightness: 1.5, range: 46 },
@@ -362,7 +354,7 @@ if (!renderer || !renderer.getContext()) {
 }
 
 function start() {
-  renderer.setClearColor(CONFIG.palette.skyHorizon, 1);
+  renderer.setClearColor(CONFIG.palette.fog, 1);   // until a world sets its own
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   // Tone mapping is applied once, by OutputPass at the end of the chain —
   // materials render linear HDR into the composer's half-float targets.
@@ -542,7 +534,6 @@ function start() {
     motionScale: sceneMotion,
     cameraPosition: camera.position,
     wind,
-    breezes: input.breezes,
   };
 
   /**

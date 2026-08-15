@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 
-<title>Night Lanterns</title>
-<meta name="description" content="A calm, endless bedtime scene. Tap a dark lake to release glowing paper lanterns and watch them drift up into the stars. No score, no goals — just something quiet to hold for a few minutes before sleep.">
+<title>Wanderer of Soft Worlds</title>
+<meta name="description" content="A calm, endless bedtime wander. Walk a hooded figure through a small multiverse of soft-coloured worlds grown from fractals, waking them gently as you go. No score, no timers, no way to fail — just somewhere quiet to be for a few minutes before sleep.">
 
-<meta name="theme-color" content="#05060d">
+<meta name="theme-color" content="#3b3550">
 <meta name="color-scheme" content="dark">
 
 <!-- home-screen install -->
@@ -15,30 +15,30 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Night Lanterns">
+<meta name="apple-mobile-web-app-title" content="Soft Worlds">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon-192.png">
 
 <!-- link previews -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Night Lanterns">
-<meta property="og:description" content="Tap a dark lake to release glowing paper lanterns and watch them drift up into the stars. A quiet thing to hold for a few minutes before sleep.">
+<meta property="og:title" content="Wanderer of Soft Worlds">
+<meta property="og:description" content="Walk a hooded figure through a small multiverse of soft-coloured worlds grown from fractals, waking them gently as you go. A quiet thing to hold for a few minutes before sleep.">
 <meta property="og:image" content="/og-image.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Paper lanterns glowing above a dark lake at night, their light reflected on still water beneath a field of stars.">
-<meta property="og:site_name" content="Night Lanterns">
+<meta property="og:image:alt" content="A small hooded figure standing in a soft-lit meadow beneath a crown of pale stone arches, under a dusty rose sky.">
+<meta property="og:site_name" content="Wanderer of Soft Worlds">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Night Lanterns">
-<meta name="twitter:description" content="Tap a dark lake to release glowing paper lanterns and watch them drift up into the stars.">
+<meta name="twitter:title" content="Wanderer of Soft Worlds">
+<meta name="twitter:description" content="Wander a hooded figure through a small multiverse of soft-coloured fractal worlds, waking them gently as you go.">
 <meta name="twitter:image" content="/og-image.jpg">
 
 <style>
   html, body {
     margin: 0; padding: 0;
     width: 100%; height: 100%;
-    background: #04050a;
+    background: #2b2740;
     overflow: hidden;
     overscroll-behavior: none;          /* no pull-to-refresh */
     touch-action: none;                 /* no pan / pinch-zoom */
@@ -54,10 +54,10 @@
     text-align: center;
     font: 300 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     letter-spacing: 0.26em; text-transform: lowercase;
-    color: rgba(255, 226, 178, 0.5);
+    color: rgba(240, 228, 255, 0.55);
     opacity: 0; pointer-events: none;
     transition: opacity 3.5s ease;
-    text-shadow: 0 0 18px rgba(255, 176, 92, 0.25);
+    text-shadow: 0 0 18px rgba(200, 178, 255, 0.28);
   }
   #hint.show { opacity: 0.65; }
 
@@ -67,10 +67,10 @@
     text-align: center;
     font: 300 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     letter-spacing: 0.24em; text-transform: lowercase;
-    color: rgba(255, 226, 178, 0.42);
+    color: rgba(240, 228, 255, 0.46);
     opacity: 0; pointer-events: none;
     transition: opacity 3.5s ease;
-    text-shadow: 0 0 18px rgba(255, 176, 92, 0.2);
+    text-shadow: 0 0 18px rgba(200, 178, 255, 0.22);
   }
   #hint2.show { opacity: 0.5; }
 
@@ -88,7 +88,7 @@
   }
   #sound.show { opacity: 0.22; pointer-events: auto; }
   #sound:active { opacity: 0.5; }
-  #sound svg { width: 20px; height: 20px; stroke: #ffd9a8; fill: none;
+  #sound svg { width: 20px; height: 20px; stroke: #e6dcff; fill: none;
                stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
   #sound .off { display: none; }
   #sound.muted .on { display: none; }
@@ -129,14 +129,14 @@
     position: fixed; inset: 0; display: none; place-items: center;
     padding: 2rem; text-align: center;
     font: 300 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: rgba(255, 226, 178, 0.55);
+    color: rgba(240, 228, 255, 0.6);
   }
 </style>
 </head>
 <body>
 
 <div id="hint">drag anywhere to wander</div>
-<div id="hint2">or tap ahead of yourself</div>
+<div id="hint2">walk near things to wake them</div>
 
 <div id="stick"><div id="knob"></div></div>
 

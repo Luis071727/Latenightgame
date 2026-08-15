@@ -153,8 +153,8 @@ export function createMotes({ CONFIG, quality, scene }) {
   const nearest = [];
 
   const dummy = new THREE.Object3D();
-  const warm = new THREE.Color(CONFIG.palette.lanternWarm);
-  const cool = new THREE.Color(CONFIG.palette.lanternCool);
+  const warm = new THREE.Color(CONFIG.palette.mote);
+  const cool = new THREE.Color(CONFIG.palette.bloom);
 
   let freeCount = 0;
   let heldCount = 0;
@@ -334,7 +334,7 @@ export function createMotes({ CONFIG, quality, scene }) {
     get held() { return heldCount; },
 
     setPalette(p) {
-      if (p.mote) { warm.set(p.mote); cool.set(p.mote); }
+      if (p.mote) warm.set(p.mote);
       if (p.bloom) cool.set(p.bloom);
     },
 
