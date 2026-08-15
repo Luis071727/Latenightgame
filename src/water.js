@@ -15,19 +15,26 @@ import { makeWaterNormals } from './textures.js';
  * Both paths share the same palette so dropping a tier changes the fidelity,
  * not the mood.
  */
-export function createWater({ CONFIG, quality, scene, renderer }) {
+export function createWater({ CONFIG, quality, scene, renderer, world }) {
   const normals = makeWaterNormals(quality.waterNormalSize);
-  const size = CONFIG.world.waterSize;
+  // A world that names a size gets a lake anchored at its own centre; without
+  // one the plane is an endless sea that rides along under the camera. A lake
+  // is nearly always what a floating island wants — an endless sea drawn under
+  // an island that ends in fog cuts a hard line straight across the horizon.
+  const size = world?.water?.size ?? CONFIG.world.waterSize;
+  const anchored = !!world?.water?.size;
   const geometry = new THREE.PlaneGeometry(size, size);
+  const level = world?.water?.level ?? 0;
+  const palette = { ...CONFIG.palette, ...(world?.palette || {}) };
 
   return quality.reflections
-    ? reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer })
-    : shadedWater({ CONFIG, scene, geometry, normals });
+    ? reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer, palette, level, anchored })
+    : shadedWater({ CONFIG, scene, geometry, normals, palette, level, anchored });
 }
 
 /* ── medium / high: real mirrored reflections ────────────────────────── */
-function reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer }) {
-  const p = CONFIG.palette;
+function reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer, palette, level, anchored }) {
+  const p = palette;
 
   const water = new Water(geometry, {
     textureWidth: quality.reflectionSize,
@@ -102,15 +109,22 @@ function reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer }
 
   scene.add(water);
 
+  water.position.y = level;
+
   return {
     object: water,
     reflective: true,
+    setPalette(next) {
+      if (next.waterDeep) water.material.uniforms.waterColor.value.set(next.waterDeep);
+    },
     update(dt, ctx) {
       reflectAccum += dt;
       water.material.uniforms.time.value += dt * CONFIG.water.flowSpeed;
-      // keep the plane centred under the camera so it never runs out
-      water.position.x = ctx.cameraPosition.x;
-      water.position.z = ctx.cameraPosition.z;
+      if (!anchored) {
+        // keep the plane centred under the camera so it never runs out
+        water.position.x = ctx.cameraPosition.x;
+        water.position.z = ctx.cameraPosition.z;
+      }
     },
     dispose() {
       scene.remove(water);
@@ -125,8 +139,8 @@ function reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer }
 }
 
 /* ── low: no second scene pass, just a well-behaved dark plane ────────── */
-function shadedWater({ CONFIG, scene, geometry, normals }) {
-  const p = CONFIG.palette;
+function shadedWater({ CONFIG, scene, geometry, normals, palette, level, anchored }) {
+  const p = palette;
 
   const uniforms = {
     uTime:    { value: 0 },
@@ -184,17 +198,24 @@ function shadedWater({ CONFIG, scene, geometry, normals }) {
   }));
 
   mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = level;
   mesh.renderOrder = -10;
   scene.add(mesh);
 
   return {
     object: mesh,
     reflective: false,
+    setPalette(next) {
+      if (next.waterDeep) uniforms.uDeep.value.set(next.waterDeep);
+      if (next.waterFar) uniforms.uFar.value.set(next.waterFar);
+    },
     update(dt, ctx) {
       uniforms.uTime.value += dt;
       uniforms.uCam.value.copy(ctx.cameraPosition);
-      mesh.position.x = ctx.cameraPosition.x;
-      mesh.position.z = ctx.cameraPosition.z;
+      if (!anchored) {
+        mesh.position.x = ctx.cameraPosition.x;
+        mesh.position.z = ctx.cameraPosition.z;
+      }
     },
     dispose() {
       scene.remove(mesh);

@@ -1,9 +1,9 @@
 {
-  "name": "night-lanterns",
+  "name": "wanderer-of-soft-worlds",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "A calm, endless bedtime scene: release paper lanterns over a dark lake and watch them drift into the stars.",
+  "description": "A calm, endless bedtime wander through a small multiverse of soft-coloured worlds grown from fractals.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

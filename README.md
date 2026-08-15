@@ -1,25 +1,51 @@
-# Night Lanterns
+# Wanderer of Soft Worlds
 
-A calm, endless bedtime scene, seen first person from the waterline. Tap a dark
-lake to release a glowing paper lantern and watch it drift up into the stars.
-No score, no goals, no fail state, no timers — just something quiet to hold for
-a few minutes before sleep.
+A calm, endless bedtime wander. A small hooded figure drifts through a handful of
+soft-coloured worlds grown from fractals, connected by dream-gates. Walk near
+something dormant and it slowly comes alight; walk near a drifting mote of light
+and it follows you home. No score, no timers, no fail state, no combat — just
+somewhere quiet to be for a few minutes before sleep.
 
-- **Tap** — release a lantern.
-- **Hold** — release a larger, brighter one that climbs more slowly.
-- **One-finger drag** — a soft breeze that nudges nearby lanterns sideways.
-- **Two-finger drag** — drift. Hold the two fingers away from where they started
-  and you keep gliding, like leaning on an oar; let go and you coast to a stop.
-  Sideways steers, up and down glides.
-- **Keyboard** — `W`/`A`/`S`/`D` or the arrow keys do the same on a laptop.
+Nothing has to be done. If you only want to walk about and wake nothing, that is
+a complete way to play it.
 
-The lake has islands on it, and you can land on them. Drift up to a beach and
-walk out of the water onto sand — the ground rises under you, the gliding turns
-into walking, and lanterns released ashore sit on the sand and light it. Lanterns
-stay where you left them, so you can leave a trail behind you and come back to it.
+- **Drag anywhere** — a floating joystick appears under your finger. Push it in
+  the direction you want to go; the figure turns toward it and drifts that way.
+  How hard you push asks for a *direction*, not a speed — a frantic shove is
+  worth no more than a firm one.
+- **Tap** — a gentle nudge toward wherever you tapped, which fades on its own.
+- **Keyboard** — `W`/`A`/`S`/`D` or the arrow keys, relative to the camera.
 
-Everything decays back to stillness on its own. After about ten minutes without a
-touch the scene dims itself to black so it won't glow all night; any tap brings it back.
+Everything else happens by being near it:
+
+- **Dormant structures** bloom when you come within a few metres, over about five
+  seconds, and each one adds a layer to the ambient pad — so a world you have
+  explored is visibly and audibly fuller than one you have just arrived in.
+  Waking is permanent for the visit.
+- **Light-motes** drift over the ground and lean toward you as you approach.
+  Gathered ones trail behind you in a slow ring, then let go and stream into the
+  world's monument, which brightens and stands a little taller as they arrive.
+- **Dream-gates** stand out toward the rim of every world, dim from the first
+  moment and brightening as more of the world wakes. Walk into an open one and
+  the screen fades up into soft light, the next world is built while nothing can
+  be seen, and it fades back down. Worlds recur, so it never truly ends.
+
+Each world is a floating island: rolling in the middle, a soft rim near the edge
+that turns walking outward into walking uphill, and then a drop into weather.
+There is no wall — push out to the rim and you can stand on it and look over;
+let go and the world leans you gently back toward its middle.
+
+After about ten minutes without a touch the whole thing dims itself to black so
+it won't glow all night. Any tap brings it back.
+
+### The worlds
+
+| | palette | grows | monument | sky |
+|---|---|---|---|---|
+| **the waking meadow** | dusty rose and soft teal | blossoming dream-trees | a crown of arches | dawn, a few stars |
+| **the quiet harbour** | muted indigo and lavender | tall pale stalks | a stepped spire | twilight, pools of water |
+| **the lantern grove** | deep teal, heavy fog | bioluminescent coral | a Menger sponge | underwater |
+| **the star garden** | violet and warm cream | faceted crystals | a Menger sponge | full starfield |
 
 ## Run it locally
 
@@ -61,129 +87,181 @@ scraper resolves against the page. If you want them fully absolute — some olde
 scrapers insist — swap the `og:image` and `twitter:image` values in `index.html`
 for `https://your-domain.vercel.app/og-image.jpg`.
 
+Bump `VERSION` in [`public/sw.js`](public/sw.js) whenever you change something a
+returning visitor must see immediately; it drops the old cache wholesale.
+
 ## Tweaking it
 
-Everything worth changing lives in the `CONFIG` object at the top of
-[`src/main.js`](src/main.js): palette, exposure, bloom, lantern speed and size,
-star count, breeze strength, camera framing, sleep timings, audio, and the
-quality tiers.
+Two files. [`src/main.js`](src/main.js) holds the `CONFIG` object at the top —
+everything that is the same wherever you are: the fallback palette, exposure,
+bloom, kaleidoscope, the wanderer, camera framing, movement, mote behaviour,
+awakening, gates, sleep timings, audio, and the quality tiers.
+[`src/worlds.js`](src/worlds.js) holds the worlds themselves, one object each.
 
-`CONFIG` is read live every frame, so you can also experiment from the browser
-console without reloading:
+`CONFIG` is read live every frame, so you can experiment from the browser console
+without reloading:
 
 ```js
-__night.CONFIG.lanterns.riseSpeed = 1.2   // lanterns climb faster
-__night.CONFIG.stars.brightness = 0.9     // brighter sky
-__night.CONFIG.movement.maxSpeed = 6      // drift across the lake faster
-__night.CONFIG.water.reflectionSmear = 0.04   // longer reflections
-__night.tier                              // which quality tier is running
-__night.downgrade()                       // step down a tier by hand
-__night.rig.state                         // position and heading on the lake
+__night.CONFIG.movement.maxSpeed = 4        // walk faster
+__night.CONFIG.kaleidoscope.amount = 0.45   // much more symmetry (and much less calm)
+__night.CONFIG.awaken.radius = 20           // wake things from further away
+__night.CONFIG.motes.gatherRadius = 10      // sweep motes up as you pass
+__night.CONFIG.camera.distance = 10         // stand further back
+__night.go('grove')                         // jump to a world by key
+__night.wakeAll()                           // wake everything at once
+__night.mood(1)                             // hold the far end of the colour cycle
+__night.progress                            // awake / gate / motes / delivered / layers
+__night.tier                                // which quality tier is running
+__night.downgrade()                         // step down a tier by hand
 ```
+
+### Per-world tuning
+
+Each entry in `WORLDS` is data and nothing else — adding a fifth world is another
+object in that array. The fields, and what each one is actually for:
+
+| field | what it does |
+|---|---|
+| `seed` | fixes the ground, the scatter and the gate's position. Same seed, same world, every visit. |
+| `palette` | overrides `CONFIG.palette` key by key. `bloom` is what an awake thing glows; `mote`, the motes; `fractalLow`/`fractalHigh` the trunk-to-tip gradient; `cloak*` re-tints the wanderer. |
+| `fog.density` | how quickly distance swallows things. Under ~0.008 you can see the edge of the world; over ~0.02 it is a fog bank. |
+| `ground.radius` | how big the island is. `amp`/`freq` are how much it rolls; `plazaRadius` flattens the middle for the monument; `rim` is the lip near the edge; `drop` is how far it falls past it. |
+| `species` | `tree`, `stalk`, `coral` or `crystal`. Branch angles and shrink rates live in `SPECIES` in [`src/fractals.js`](src/fractals.js); `tipScale` there is the single number that decides whether a structure reads as a tree in leaf or a tree in winter. |
+| `structures` | `count` before the tier scales it, `min`/`maxHeight`, `radius` for trunk thickness, `sway`, and `spacing` as a minimum distance apart. |
+| `monument` | `type` is `menger`, `spire` or `ring`; `size` is roughly its footprint. |
+| `clouds` | drifting sheets: `height`, `spacing` between layers, `scale` and `drift` for the noise, `amount` for opacity. Layer count comes from the tier. |
+| `water` | `null`, or `{ level, size }`. Giving a `size` anchors the lake at the world's centre; without one it becomes an endless sea riding under the camera, which draws a hard line across the horizon of an island that ends in fog. |
+| `stars` | 0..1, how much of the starfield this sky admits. |
+| `fireflies` | 0..1.4, how thick the ambient drift is. |
+| `audio` | `root` in Hz, `scale` as semitone offsets, `brightness` as a lowpass cutoff. Layers walk up the scale and wrap an octave higher, so more layers is a wider chord rather than the same notes doubled. |
 
 ### Quality tiers
 
-The scene picks `high`, `medium` or `low` from the device's GPU string, core
-count and memory, then watches real frame times and steps down one tier if the
-guess was optimistic. It never steps back up — oscillating between tiers is far
-more noticeable than sitting one notch below perfect.
+The scene picks `high`, `medium` or `low` from the device's GPU string, core count
+and memory, then watches real frame times and steps down one tier if the guess was
+optimistic. It never steps back up — oscillating between tiers is far more
+noticeable than sitting one notch below perfect.
 
 | | high | medium | low |
 |---|---|---|---|
-| Water reflections | 512px | 256px | off (shaded plane) |
+| Fractal recursion depth | 5 | 4 | 3 |
+| Instance budget per world | 7000 | 3600 | 1600 |
+| Structures | 100% | 80% | 60% |
+| Menger depth | 2 (400 blocks) | 2 | 1 (20) |
+| Ground resolution | 128² | 96² | 64² |
+| Cloud layers | 3 | 2 | 1 |
+| Kaleidoscope | yes | yes | off |
 | Bloom | yes | yes | off |
-| Max lanterns | 40 | 30 | 20 |
-| Star count | 100% | 70% | 45% |
+| Max motes | 48 | 34 | 22 |
+| Wanderer segments / shadow | 22 / yes | 16 / yes | 11 / no |
+| Water reflections | 512px | 256px | off (shaded plane) |
 | Pixel ratio cap | 2 | 1.75 | 1.25 |
-| Terrain detail | ~53k tris | ~25k | ~14k |
 
-Append `?tier=high`, `?tier=medium` or `?tier=low` to the URL to force one. A
-forced tier is pinned — the frame watcher won't override a deliberate choice.
+Append `?tier=high`, `?tier=medium` or `?tier=low` to force one. A forced tier is
+pinned — the frame watcher won't override a deliberate choice.
 
-Terrain resolution is fixed when the scene starts, so an automatic downgrade
-mid-session sheds the reflection pass and bloom but keeps the ground it has
-already built. Reload to rebuild it coarser.
+A downgrade rebuilds the world in place: the fractals thin out, the ground
+coarsens, and the motes in flight are lost. It costs a fraction of a second, in
+exchange for a stutter that would otherwise never go away.
 
 ## How it's put together
 
 ```
 index.html          meta tags, the small DOM overlay, mounts /src/main.js
-src/main.js         CONFIG, bootstrap, the frame loop
-src/quality.js      tier detection + the frame-time watcher
-src/post.js         EffectComposer: render → bloom → tone map → vignette + dither
+src/main.js         CONFIG, bootstrap, world loading, the frame loop
+src/worlds.js       the worlds as data, and building one
+src/fractals.js     bounded recursion, instancing, fbm, cloud sheets
+src/terrain.js      the ground heightfield, its shader, and heightAt()
+src/character.js    the wanderer: one lathe, a hem that sways, a blob shadow
+src/rig.js          where the wanderer is, and the camera trailing them
+src/input.js        floating joystick, tap-to-move, keyboard
+src/motes.js        one InstancedMesh for every light-mote
+src/gate.js         a dream-gate: a ring and a veil, driven by one number
+src/post.js         EffectComposer: render → kaleidoscope → bloom → tone map → vignette
 src/sky.js          gradient dome and the parallax star shells
-src/water.js        the lake (Water addon, or a shaded plane on low)
-src/lanterns.js     one InstancedMesh for every lantern
+src/water.js        lakes (Water addon, or a shaded plane on low)
 src/fireflies.js    points animated entirely in the vertex shader
 src/haze.js         horizon mist band
-src/terrain.js      island heightfields, the sand shader, and heightAt()
-src/rig.js          where you are on the lake and which way you face
-src/holdglow.js     the pool of light under a held finger
-src/input.js        tap / hold / drag
-src/audio.js        synthesised pad and water wash
-src/ui.js           hint, mute, sleep fade, wake lock
+src/audio.js        drone, noise wash, and the layers that come up as you explore
+src/ui.js           hint, mute, gate fade, sleep fade, wake lock
+src/quality.js      tier detection + the frame-time watcher
+src/textures.js     the water normal map and the seeded PRNG
 public/             manifest, icons, OG image, service worker
 ```
 
 A few decisions worth knowing about if you go editing:
 
-- **Nothing is loaded from disk.** The water normal map, the icons' glow, and all
-  the audio are generated at runtime. That is what makes the scene work offline
-  and keeps the deploy to code alone.
+- **Nothing is loaded from disk.** Every mesh, texture and sound is generated at
+  runtime. That is what makes the whole thing work offline and keeps the deploy
+  to code alone.
+- **Fractals are evaluated once and then only moved.** A fractal is expensive to
+  evaluate and cheap to have, so each world bakes its recursion into instance
+  transforms at build time; a whole forest is one draw call and the per-frame
+  cost is a uniform. Depth is capped everywhere it appears, because a branching
+  structure is 3^depth instances and that exponent is the only thing between
+  this and a phone that gets hot.
+- **There is no raymarched fractal.** It was on the table as a distant backdrop
+  rendered at reduced resolution on the high tier only. Instanced geometry got
+  close enough to the look that a second, tier-gated rendering path would have
+  been cost without a difference — so the monuments are instanced like
+  everything else.
+- **Structures stay contiguous in the instance buffers.** Each one remembers its
+  own slice, so waking a single structure writes a range of an attribute rather
+  than touching the scene graph.
+- **Waking lights the tips and only warms the body.** Lighting a whole structure
+  evenly blows the frame out to white; what reads as *it came alive* is the ends
+  glowing while the body underneath stays a body.
+- **The kaleidoscope is masked out of the middle of the screen.** Folding the
+  whole frame is genuinely unpleasant — the ground swims under you and there is
+  nothing fixed left to hold on to. The periphery dreams; the thing you are
+  steering stays exactly where you put it. It also sits *before* the bloom, so
+  what it folds is light rather than an already-graded image.
 - **Tone mapping happens once, in `OutputPass`.** Materials render linear HDR into
-  half-float targets, so lanterns can legitimately be brighter than white and
-  drive the bloom threshold themselves. The sleep fade is therefore a single
-  number: `renderer.toneMappingExposure`.
-- **Lanterns are additively blended.** Instances inside one `InstancedMesh` can't
-  be depth-sorted against each other, and additive blending is order-independent —
-  which is also the right look for a light source on a near-black lake.
-- **The lantern's base is its brightest part.** The flame sits low, and the
-  reflection camera under the lake sees nothing but the underside.
-- **Instances are pooled, never allocated.** Capacity is fixed at construction and
-  slots are recycled, so there is no memory growth and nothing to collect mid-flight.
-- **Reflections are smeared, not sampled once.** The stock `Water` addon takes a
-  single reflection tap and offsets it, which mirrors a lantern as a crisp
-  displaced copy of itself — reflections end up looking like debris. Real water
-  scatters a reflection along the view direction, so the shader is patched to walk
-  several taps up and down the mirror texture. The taps are evenly spaced on
-  purpose: randomised offsets turn a star, one or two pixels across, into speckle.
-- **The eye sits at the waterline.** `camera.height` is 1.6 — head height for
-  someone sitting on a low jetty. It is the single number that decides whether
-  the scene reads as first person or as a drone shot; much above 2 and you are
-  looking down on the lake. `camera.lookAtRise` is relative to the eye, so
-  changing the height moves the whole view instead of re-pitching it.
-- **Each island is its own mesh, deliberately.** Merging the archipelago into
-  one draw call also merges it into one bounding volume, so the whole terrain
-  gets submitted every frame even when most of it is behind you — and the
-  water's reflection pass draws it a second time. Thirteen draw calls cost far
-  less than the vertices the frustum can reject: measured on the high tier,
-  a frame facing an island draws about 39k of the 53k triangles available.
-- **The dunes are coarse geometry on purpose.** Ripples and grain live in the
-  fragment shader, so the mesh only has to carry the large forms. Halving the
-  vertex density is invisible on the beach and halves what the reflection pass
-  has to redraw.
-- **The islands are heightfields, and one function defines them.** `heightAt()`
-  both displaces the mesh vertices and answers where the camera's feet are, so
-  what you walk on is exactly what you see — there is no second collision
-  approximation to drift out of sync with the art. Normals come from central
-  differences on the same function rather than from the triangles, which is
-  exact and cannot seam where islands are merged together.
-- **Sand is shaded, not textured.** Ripples are an analytic slope, grain is a
-  finite difference on noise, and both perturb the normal rather than tinting
-  the colour — sand catches light, it isn't speckled with dark spots. The grain
-  fades out with distance: left on, it aliases into blotches that read as
-  gravel. The nearest few lanterns are fed in as real point lights, which is
-  what makes it look like a surface at all; lit only by the sky it is a flat
-  grey shape.
-- **The sky rides with you.** The dome and both star shells follow the camera, so
-  crossing the lake doesn't swing the constellations overhead. Fireflies wrap
-  around you instead, and lanterns are recycled by distance from the camera
-  rather than by absolute position.
+  half-float targets, so an awake structure can legitimately be brighter than
+  white and drive the bloom threshold itself. The sleep fade is therefore a
+  single number: `renderer.toneMappingExposure`.
+- **Movement is capped and damped, not scaled.** Input asks for a direction and a
+  0..1 strength; the rig decides what that is worth, and its ceilings mean a
+  hurried gesture cannot make the experience hurried. Steering is by heading
+  rather than by rudder, so a shove of the stick can never slide the figure
+  sideways.
+- **The wanderer has no joints.** A walk cycle at this scale is either expensive
+  or bad, and a figure that glides reads as serene where a figure that walks
+  badly reads as broken. The movement is sold by a slow bob, a lean into turns,
+  and a hem that sways on a sine field and trails behind the direction of travel.
+- **The robe is shaded like clay.** The palette colour is the answer and the sky
+  only brightens it — multiplying a dark robe by a dark sky lands two dark
+  colours on top of each other and leaves a black cut-out.
+- **The ground is one heightfield, and one function defines it.** `heightAt()`
+  both displaces the mesh and answers where the wanderer's feet are, so what you
+  walk on is exactly what you see. Normals come from central differences on the
+  same function rather than from the triangles.
+- **The terrain object survives a world change.** `build()` swaps its insides, so
+  the rig holding a reference to it keeps working straight through a transition.
+- **Motes lean toward you well before they can be gathered.** Without it a mote
+  is a four-metre target in a hundred-and-twenty-metre world and you only ever
+  collect one by accident.
+- **Motes are additively blended and pooled.** Instances inside one
+  `InstancedMesh` can't be depth-sorted against each other, and additive blending
+  is order-independent — which is also the right look for a light source.
+  Capacity is fixed at construction and slots are recycled, so there is no
+  memory growth and nothing to collect mid-flight.
+- **Audio layers are built once and retuned, never created and destroyed.** Every
+  oscillator start and stop is a chance for a click, and a click is the one thing
+  that could wake someone who is nearly asleep. The layer count is also tracked
+  whether or not there is an audio context yet: the first structures are usually
+  woken before the first touch, so a world explored in silence comes up already
+  full when sound is finally allowed to start.
+- **Gates keep a clearing.** A gate with a dream-tree grown through it is a gate
+  you cannot see.
 
 ## Browser support
 
 Needs WebGL 2 (everything current). Falls back to a short message if it's
 unavailable. Sound waits for your first touch, because browsers block audio
 before a gesture. The Wake Lock API keeps the screen on where it exists and is
-skipped silently where it doesn't. `prefers-reduced-motion` cuts the camera
-movement and slows the drift.
+skipped silently where it doesn't.
+
+`prefers-reduced-motion` is respected throughout: the camera bob is cut to a
+fraction, everything that drifts slows down, the hem and the clouds move less,
+and the kaleidoscope is halved and stops turning.

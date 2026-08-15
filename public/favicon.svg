@@ -1,17 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <radialGradient id="g" cx="50%" cy="56%" r="48%">
-      <stop offset="0%" stop-color="#ffd9a0"/>
-      <stop offset="45%" stop-color="#ffb257" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#ffb257" stop-opacity="0"/>
+    <radialGradient id="glow" cx="50%" cy="44%" r="52%">
+      <stop offset="0%" stop-color="#ffe4c0" stop-opacity="0.85"/>
+      <stop offset="50%" stop-color="#d8bfc8" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#d8bfc8" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="p" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffe0b0"/>
-      <stop offset="100%" stop-color="#e8913f"/>
+    <linearGradient id="cloak" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a396c8"/>
+      <stop offset="100%" stop-color="#3d3550"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#05060d"/>
-  <circle cx="32" cy="34" r="26" fill="url(#g)"/>
-  <path d="M23 24 h18 l-2.5 18 h-13 z" fill="url(#p)"/>
-  <rect x="25" y="42" width="14" height="2.5" rx="1.2" fill="#2a1a10"/>
+  <rect width="64" height="64" rx="14" fill="#2b2740"/>
+  <!-- the gate the wanderer is walking toward -->
+  <circle cx="32" cy="27" r="17" fill="url(#glow)"/>
+  <circle cx="32" cy="27" r="16" fill="none" stroke="#ffe4c0" stroke-opacity="0.9" stroke-width="2.4"/>
+  <!-- and the wanderer: hood, shoulders, hem -->
+  <path d="M32 30 a4.6 4.6 0 0 1 4.6 4.8 c0 2.4 1.2 3.2 2.6 5.2 c2.2 3.2 3.4 7.2 3.4 11 h-21.2 c0-3.8 1.2-7.8 3.4-11 c1.4-2 2.6-2.8 2.6-5.2 a4.6 4.6 0 0 1 4.6-4.8 z"
+        fill="url(#cloak)"/>
 </svg>
