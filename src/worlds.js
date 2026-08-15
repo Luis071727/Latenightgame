@@ -376,6 +376,9 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
   let spin = 0;
   let awake = 0;
   let growth = 0;
+  // how far along the monument stands because of everything the player has
+  // ever done here, as opposed to `growth`, which is this visit's motes
+  let form = { lift: 0, glow: 0 };
 
   // where gathered motes go, and where the monument's own light sits
   const monumentPoint = new THREE.Vector3(0, mBase + mSize * 1.05, 0);
@@ -424,10 +427,22 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
     setMonumentGrowth(value) {
       growth = THREE.MathUtils.clamp(value, 0, 1);
       const arr = monument.bloom.array;
-      const lit = growth * 0.85;
+      // This visit's motes, plus whatever standing the player has already
+      // earned here. A monument in a world you know well is already lit when
+      // you arrive, which is the point of coming back to one.
+      const lit = Math.min(1, growth * 0.85 + form.glow * 0.55);
       for (let i = 0; i < arr.length; i++) arr[i] = lit;
       monument.bloom.needsUpdate = true;
-      monument.mesh.scale.setScalar(0.80 + 0.20 * growth);
+      monument.mesh.scale.setScalar(0.80 + 0.20 * growth + form.lift);
+    },
+
+    /**
+     * How the monument stands, from the player's mastery of this world.
+     * @param f an entry from MONUMENT_FORMS — dormant through radiant
+     */
+    setMasteryForm(f) {
+      form = f || { lift: 0, glow: 0 };
+      this.setMonumentGrowth(growth);
     },
 
     /**

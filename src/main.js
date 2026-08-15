@@ -16,9 +16,8 @@ import { createPost } from './post.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createUI } from './ui.js';
-import {
-  loadSettings, saveSettings, loadJourney, saveJourney, eraseJourney,
-} from './save.js';
+import { loadSettings, saveSettings } from './save.js';
+import { createArchive } from './archive.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIG — everything worth tweaking lives here.
@@ -551,27 +550,15 @@ function start() {
   let delivered = 0;
   let gateAnnounced = false;   // "a gate has opened" is said once per visit
 
-  /* The journey: which world this is, what has been woken there, how many
-     motes the monument has taken. Mirrored to localStorage so an accidental
-     refresh — or a phone quietly killing the tab overnight — puts the player
-     back where they drifted off, with everything they woke still alight. */
-  const journey = { world: 0, delivered: 0, awakened: new Set() };
-  const remembered = loadJourney();
-  if (remembered) {
-    journey.world = ((remembered.world % WORLDS.length) + WORLDS.length) % WORLDS.length;
-    journey.delivered = Math.max(0, Math.min(remembered.delivered, CONFIG.motes.monumentTarget));
-    for (const i of remembered.awakened) journey.awakened.add(i);
-  }
-  CONFIG.world.start = journey.world;
-
-  let journeySaveAt = null;
-  function saveJourneySoon() {
-    if (journeySaveAt) return;
-    journeySaveAt = setTimeout(() => {
-      journeySaveAt = null;
-      saveJourney(journey);
-    }, 2500);
-  }
+  /* The archive owns everything the player keeps: which world they are in,
+     what they woke and found in each, what they have unlocked and what they
+     are wearing. It migrates a pre-archive save forward rather than replacing
+     it, so a returning player arrives partway along rather than at zero. */
+  const archive = createArchive({
+    worlds: WORLDS,
+    monumentTarget: CONFIG.motes.monumentTarget,
+  });
+  CONFIG.world.start = ((archive.currentWorld % WORLDS.length) + WORLDS.length) % WORLDS.length;
 
   function loadWorld(index) {
     worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
@@ -606,23 +593,21 @@ function start() {
     ui.setFlashColor(p.bloom);
     audio.setWorld(world.audio);
 
-    // Same world as the remembered journey (arriving from a refresh or a
-    // quality rebuild): put back what was woken, already alight. A different
-    // world means we walked on — the journey starts over from here.
-    if (worldIndex === journey.world) {
-      content.restoreAwake(journey.awakened, () => audio.addLayer());
-      delivered = journey.delivered;
-    } else {
-      journey.world = worldIndex;
-      journey.delivered = 0;
-      journey.awakened.clear();
-      delivered = 0;
-      saveJourney(journey);
-      // name the new place as it comes into view — held back so it arrives
-      // with the gate-light still clearing, not on top of it
-      if (ui.began) ui.showWorldName(world.name, 1400);
-    }
+    /* Every world remembers its own visit. Arriving anywhere — for the first
+       time, after a refresh, or years later — puts back what was woken and
+       delivered there, so a world you know is visibly a world you know and
+       the monument stands where you left it. What is left to do in a world
+       you have finished is find the things you never found. */
+    const visited = archive.arrive(world.key);
+    archive.setCurrentWorld(worldIndex);
+    content.restoreAwake(visited.awakened, () => audio.addLayer());
+    delivered = visited.delivered;
     content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
+    content.setMasteryForm(archive.monumentForm(world.key));
+
+    // name the place as it comes into view — held back so it arrives with the
+    // gate-light still clearing, not on top of it
+    if (ui.began) ui.showWorldName(world.name, 1400);
 
     // water is per-world: most of them have none at all
     if (water) { water.dispose(); water = null; }
@@ -749,10 +734,7 @@ function start() {
       soft light a dream-gate uses — resetting should feel like dreaming
       again, not like a page reload */
   function resetJourney() {
-    eraseJourney();
-    journey.world = 0;
-    journey.delivered = 0;
-    journey.awakened.clear();
+    archive.reset();
     if (!ui.transition(() => loadWorld(0))) loadWorld(0);
   }
 
@@ -848,8 +830,7 @@ function start() {
     if (!ui.transitioning) {
       content.updateAwakening(dt, rig.state.x, rig.state.z, (i, s) => {
         audio.addLayer();
-        journey.awakened.add(i);
-        saveJourneySoon();
+        archive.noteAwakened(world.key, i, content.awake);
         companion?.notice(s.x, s.y, s.z);   // off it goes to look
       });
     }
@@ -864,8 +845,7 @@ function start() {
     const arrived = motes.update(dt, ctx, rig.state, content.monumentPoint);
     if (arrived > 0) {
       delivered += arrived;
-      journey.delivered = delivered;
-      saveJourneySoon();
+      archive.noteDelivered(world.key, delivered);
     }
     content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
 
@@ -937,7 +917,7 @@ function start() {
   // let go of the GPU politely if the page is put away — and write the journey
   // down first, since a backgrounded tab may never come back
   window.addEventListener('pagehide', () => {
-    saveJourney(journey);
+    archive.flush();
     saveSettings(settings);
     renderer.setAnimationLoop(null);
   });
@@ -951,7 +931,8 @@ function start() {
   window.__night = {
     CONFIG,
     settings,
-    journey,
+    archive,
+    get summary() { return archive.summary(); },
     get tier() { return tierName; },
     /** jump to any tier by name, exactly as the settings panel would */
     setTier(name) { applyQualityChoice(name); return tierName; },
