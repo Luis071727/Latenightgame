@@ -2,6 +2,7 @@ import {
   DISCOVERIES, COLLECTIONS, MASTERY_REWARDS, TITLES, COSMETICS,
   discovery, discoveriesOf, defaultCosmetic, cosmetic, title,
   monumentForm, IS_RARE, TOTAL_DISCOVERIES,
+  variantsOf, defaultVariant,
 } from './discoveries.js';
 import {
   loadArchive, loadLegacyJourney, saveArchive, eraseArchive,
@@ -57,6 +58,7 @@ function emptyArchive() {
       title: 'wanderer',
     },
     profile: { name: '', created: Date.now() },
+    variants: {},                   // world key -> the mood chosen for it
     milestones: [],                 // ids of one-off things that have happened
   };
 }
@@ -114,6 +116,7 @@ export function migrate(raw, worldKeys, legacy = null) {
     out.unlocks = { ...base.unlocks, ...(raw.unlocks || {}) };
     out.equipped = { ...base.equipped, ...(raw.equipped || {}) };
     out.profile = { ...base.profile, ...(raw.profile || {}) };
+    out.variants = raw.variants || {};
     out.worlds = raw.worlds || {};
     out.milestones = Array.isArray(raw.milestones) ? raw.milestones : [];
     out.v = SAVE_VERSION;
@@ -390,6 +393,50 @@ export function createArchive({ worlds, monumentTarget }) {
     /** the colour the equipped companion wants, or null */
     companionColor() {
       return cosmetic('companion', data.equipped.companion)?.color ?? null;
+    },
+
+    /* ── dream variants ───────────────────────────────────────────────
+     *
+     * A variant is a mood, not a level: unlocked by knowing a world well,
+     * chosen freely afterwards, and never forced. The default is always
+     * available, so there is no way to end up somewhere you did not want.
+     */
+
+    /** every mood of a world, each marked with whether it is available yet */
+    variants(key) {
+      const m = mastery(key).value;
+      return variantsOf(key).map((v) => ({
+        ...v,
+        unlocked: !!v.default || m + 1e-6 >= (v.at ?? 1),
+        chosen: this.variant(key) === v.id,
+      }));
+    },
+
+    /**
+     * The mood this world is currently set to be found in.
+     *
+     * Resolved without going through `variants()` — that one asks this one
+     * which is chosen, and the two calling each other is an infinite loop.
+     * A choice that is no longer unlocked (which cannot happen today, since
+     * nothing is ever taken away) falls back to the default rather than
+     * leaving the world unbuildable.
+     */
+    variant(key) {
+      const want = data.variants[key];
+      if (!want) return defaultVariant(key);
+      const v = variantsOf(key).find((x) => x.id === want);
+      if (!v) return defaultVariant(key);
+      const unlocked = !!v.default || mastery(key).value + 1e-6 >= (v.at ?? 1);
+      return unlocked ? v.id : defaultVariant(key);
+    },
+
+    /** choose a mood, if it has been unlocked */
+    setVariant(key, id) {
+      const hit = this.variants(key).find((v) => v.id === id && v.unlocked);
+      if (!hit) return false;
+      data.variants[key] = id;
+      saveSoon();
+      return true;
     },
 
     /**

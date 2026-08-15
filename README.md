@@ -58,6 +58,34 @@ entire, the four worlds, every memory there is, the wanderer themself, and a
 quiet **beside** view for comparing journeys. Nothing there is ranked, nothing
 expires, and nothing is lost by staying away.
 
+### Your sanctuary
+
+From the archive you can **visit your sanctuary** — a small warm place that is
+only yours. Nothing there sleeps and nothing is scored. Its monument answers to
+the whole journey rather than to any one world, and around it stand all
+thirty-two memories in four arcs, one per world: the ones you have found burn
+and turn slowly, and the ones you have not are still there, dim and empty,
+waiting. Its gate takes you back to exactly where you were.
+
+### Dream variants
+
+Once you know a world well it can be found in other moods. At half mastery one
+opens, at 85% another:
+
+| | | |
+|---|---|---|
+| **the waking meadow** | Golden Dawn | Starfall |
+| **the quiet harbour** | Slack Water | Lantern Tide |
+| **the lantern grove** | Sleeping Bloom | Clearwater |
+| **the star garden** | Emberfall | The Quiet |
+
+A variant overrides palette, fog, stars and fireflies and *nothing else*. The
+seed is untouched, so the ground rolls the same way, the structures stand where
+they always stood, and any memory you have not found is exactly where it was.
+Only the light changes — which is most of what a world is here, and makes a
+variant nearly free: no new geometry and no fifth world to author. Choose one
+from the **worlds** tab of the archive.
+
 The wanderer has two soft lights in their hood that blink and glance at
 whatever the world has just offered, breathe and shift their weight when
 standing still, and carry a chest light that flares when a mote is gathered and
@@ -164,6 +192,9 @@ __night.summary                             // the whole journey, in numbers
 __night.archive.mastery('meadow')           // how well one world is known
 __night.toFragment()                        // walk to the nearest unfound memory
 __night.journal.show('memories')            // open the archive at a tab
+__night.home()                              // go to the sanctuary, or come back
+__night.archive.variants('meadow')          // its moods, and which are unlocked
+__night.archive.setVariant('meadow','golden')
 __night.analytics.recent                    // what has been emitted this session
 __night.CONFIG.movement.paceScale = 1.8     // faster than any pace preset
 __night.companion                           // the little light, or null on saver
@@ -262,6 +293,7 @@ src/discoveries.js  what there is to find, and what finding it earns (all data)
 src/archive.js      the Dream Archive: found, mastery, unlocks, save migration
 src/fragments.js    the memories as objects in the ground, instanced
 src/journal.js      the archive as a page (DOM, only renders when open)
+src/sanctuary.js    the memories standing up, in the place that is yours
 src/leaderboard.js  profile + comparison behind a service interface, local mock
 src/analytics.js    event names and a ring buffer; no provider, no network
 src/rig.js          where the wanderer is, and the camera trailing them

@@ -159,6 +159,34 @@ export function createJournal({
 
       const form = archive.monumentForm(w.key);
       card.appendChild(el('j-note', `The monument stands ${form.name.toLowerCase()}.`));
+
+      /* The moods this world can be found in. Only shown once there is more
+         than the one you started with, so a player who has not unlocked
+         anything never sees a row of locked things they cannot use. */
+      const moods = archive.variants(w.key);
+      if (moods.some((v) => v.unlocked && !v.default)) {
+        const seg = el('j-moods');
+        for (const v of moods) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = `j-mood${v.chosen ? ' on' : ''}${v.unlocked ? '' : ' locked'}`;
+          b.disabled = !v.unlocked;
+          b.textContent = v.unlocked ? v.name : '—';
+          b.title = v.unlocked ? v.note : 'Know this world better.';
+          if (v.unlocked) {
+            b.addEventListener('click', () => {
+              archive.setVariant(w.key, v.id);
+              onEquip?.('variant', v.id);
+              render();
+            });
+          }
+          seg.appendChild(b);
+        }
+        card.appendChild(seg);
+        const chosen = moods.find((v) => v.chosen);
+        if (chosen) card.appendChild(el('j-note', chosen.note));
+      }
+
       out.appendChild(card);
     }
     return out;

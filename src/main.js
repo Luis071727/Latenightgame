@@ -23,7 +23,7 @@ import { createJournal } from './journal.js';
 import { createSanctuaryDisplay } from './sanctuary.js';
 import { createAnalytics, EVENTS } from './analytics.js';
 import { createProfileService, createLeaderboardService } from './leaderboard.js';
-import { RARITY, title, cosmetic } from './discoveries.js';
+import { RARITY, title, cosmetic, applyVariant } from './discoveries.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIG — everything worth tweaking lives here.
@@ -759,7 +759,11 @@ function start() {
 
     // name the place as it comes into view — held back so it arrives with the
     // gate-light still clearing, not on top of it
-    if (ui.began) ui.showWorldName(world.name, 1400);
+    if (ui.began) {
+      ui.showWorldName(
+        world.variantName ? `${world.name} — ${world.variantName.toLowerCase()}` : world.name,
+        1400);
+    }
 
     // water is per-world: most of them have none at all
     if (water) { water.dispose(); water = null; }
@@ -784,7 +788,11 @@ function start() {
   /** one of the four worlds, by index, wrapping in both directions */
   function loadWorld(index) {
     worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
-    buildPlace(WORLDS[worldIndex], false);
+    const base = WORLDS[worldIndex];
+    // ...in whichever mood it has been set to be found in. The seed is
+    // untouched, so the ground, the structures and the memories are exactly
+    // where they were — only the light is different.
+    buildPlace(applyVariant(base, archive.variant(base.key)), false);
   }
 
   /**

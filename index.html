@@ -631,6 +631,19 @@
   .j-beside.me .j-beside-n { color: var(--accent); font-style: normal; letter-spacing: 0.14em; }
   .j-beside-v { font: 300 13px/1.4 var(--serif); color: var(--ink); flex: none; }
 
+  /* which mood a world will be found in next time */
+  .j-moods { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .j-mood {
+    appearance: none; -webkit-appearance: none;
+    background: none; border: 1px solid rgba(226, 214, 255, 0.14);
+    border-radius: 999px; padding: 8px 12px; min-height: 36px;
+    font: 300 10.5px/1 var(--sans);
+    letter-spacing: 0.12em; color: var(--ink-faint);
+    cursor: pointer; transition: color 0.25s ease, border-color 0.25s ease;
+  }
+  .j-mood.on { color: var(--accent); border-color: rgba(255, 214, 168, 0.4); }
+  .j-mood.locked { opacity: 0.3; cursor: default; }
+
   /* the way home — the only button in the archive that goes anywhere */
   .j-go {
     appearance: none; -webkit-appearance: none;

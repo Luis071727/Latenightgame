@@ -283,6 +283,148 @@ export const MASTERY_REWARDS = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   dream variants
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Other moods the same place can be in.
+ *
+ * A variant is a shallow override of a world's own data — palette keys, fog,
+ * stars, fireflies — and nothing else. The seed is untouched, so the ground
+ * rolls the same way, the structures stand where they always stood and the
+ * memories are where you left them. What changes is the light, and the light
+ * is most of what a world *is* here.
+ *
+ * That makes a variant nearly free: no new geometry, no new generation, no
+ * fifth world to author. It is the cheapest possible answer to "why would I
+ * go back to somewhere I have finished", and the honest one — you go back
+ * because you have never seen it like this.
+ *
+ * They unlock at half mastery of the world they belong to, which is far
+ * enough in that the ordinary version is thoroughly familiar first.
+ */
+export const VARIANTS = {
+  meadow: [
+    { id: 'dawn', name: 'Dawn', default: true,
+      note: 'The meadow as you first found it.' },
+    { id: 'golden', name: 'Golden Dawn', at: 0.5,
+      note: 'The morning got further along without you.',
+      palette: {
+        skyTopA: 0x4d4250, skyTopB: 0x6a4f48, skyHorizon: 0x9a6a50,
+        horizonGlow: 0x5c3018, fog: 0x6e5044,
+        groundHigh: 0xb0a878, fractalHigh: 0xe8c090, bloom: 0xffe0a8,
+      },
+      stars: 0.05, fireflies: 1.3 },
+    { id: 'starfall', name: 'Starfall', at: 0.85,
+      note: 'Night, and the sky is coming apart very slowly.',
+      palette: {
+        skyTopA: 0x1e1e3a, skyTopB: 0x2a2444, skyHorizon: 0x2e2840,
+        horizonGlow: 0x1a1428, fog: 0x2a2440,
+        groundLow: 0x2e3a3c, groundHigh: 0x5a6458,
+        fractalHigh: 0x9a8fb0, bloom: 0xd8d0ff, mote: 0xc8c4ff,
+      },
+      stars: 1.0, fireflies: 0.5, fog: 0.0090 },
+  ],
+
+  harbor: [
+    { id: 'twilight', name: 'Twilight', default: true,
+      note: 'The harbour as you first found it.' },
+    { id: 'slack', name: 'Slack Water', at: 0.5,
+      note: 'The tide has stopped deciding. Everything is very still.',
+      palette: {
+        skyTopA: 0x243048, skyTopB: 0x2e3652, skyHorizon: 0x3e4a68,
+        fog: 0x33405c, groundHigh: 0x62789a,
+        fractalHigh: 0x8fa8cc, bloom: 0xd8e8ff, mote: 0xcfe0ff,
+      },
+      stars: 0.35, fireflies: 0.5, fog: 0.0170 },
+    { id: 'lantern-tide', name: 'Lantern Tide', at: 0.85,
+      note: 'Something out on the water is lit, and getting no nearer.',
+      palette: {
+        skyTopA: 0x201c38, skyTopB: 0x2a2140, skyHorizon: 0x4a3450,
+        horizonGlow: 0x3a1c22, fog: 0x2e2442,
+        fractalHigh: 0xc09ab0, bloom: 0xffc8a8, mote: 0xffbf96,
+      },
+      stars: 0.8, fireflies: 1.2 },
+  ],
+
+  grove: [
+    { id: 'deep', name: 'Deep', default: true,
+      note: 'The grove as you first found it.' },
+    { id: 'sleeping-bloom', name: 'Sleeping Bloom', at: 0.5,
+      note: 'The fog came all the way in. You can hear more than you can see.',
+      palette: {
+        skyTopA: 0x1a3038, skyTopB: 0x1e363a, skyHorizon: 0x142a32,
+        fog: 0x18303a, groundHigh: 0x3e6660,
+        fractalHigh: 0x6ea89e, bloom: 0x88e8d0,
+      },
+      stars: 0.0, fireflies: 1.8, fog: 0.0300 },
+    { id: 'clearwater', name: 'Clearwater', at: 0.85,
+      note: 'Once, and not for long, the grove is legible all the way out.',
+      palette: {
+        skyTopA: 0x24505c, skyTopB: 0x2e5c62, skyHorizon: 0x1e4650,
+        fog: 0x224852, groundHigh: 0x6a9c90,
+        fractalHigh: 0xa8dcd0, bloom: 0xc8fff0,
+      },
+      stars: 0.30, fireflies: 0.8, fog: 0.0105 },
+  ],
+
+  garden: [
+    { id: 'cosmic', name: 'Cosmic', default: true,
+      note: 'The garden as you first found it.' },
+    { id: 'emberfall', name: 'Emberfall', at: 0.5,
+      note: 'Warm, for once. Something a long way off is burning kindly.',
+      palette: {
+        skyTopA: 0x2a1c30, skyTopB: 0x3a2434, skyHorizon: 0x1c1220,
+        horizonGlow: 0x4a2418, fog: 0x2a1e2c,
+        groundHigh: 0x7a6068, fractalHigh: 0xd8a890,
+        bloom: 0xffd0a0, mote: 0xffc088,
+      },
+      stars: 0.9, fireflies: 1.0 },
+    { id: 'the-quiet', name: 'The Quiet', at: 0.85,
+      note: 'Almost no light at all, and somehow the easiest place to be.',
+      palette: {
+        skyTopA: 0x101024, skyTopB: 0x16142a, skyHorizon: 0x080810,
+        horizonGlow: 0x140e1c, fog: 0x101020,
+        groundLow: 0x181a2e, groundHigh: 0x3a3658,
+        fractalHigh: 0x8a7ab0, bloom: 0xd0c0f0,
+      },
+      stars: 1.0, fireflies: 0.4, fog: 0.0080 },
+  ],
+};
+
+export function variantsOf(worldKey) {
+  return VARIANTS[worldKey] || [];
+}
+
+export function variant(worldKey, id) {
+  return variantsOf(worldKey).find((v) => v.id === id) || null;
+}
+
+export function defaultVariant(worldKey) {
+  return variantsOf(worldKey).find((v) => v.default)?.id ?? null;
+}
+
+/**
+ * Fold a variant's overrides over a world, returning a new object. The
+ * original world data is never touched — it is module state shared by every
+ * load, and mutating it would make a variant permanent the first time it was
+ * chosen.
+ */
+export function applyVariant(world, id) {
+  const v = variant(world.key, id);
+  if (!v || v.default) return world;
+  return {
+    ...world,
+    variant: v.id,
+    variantName: v.name,
+    palette: { ...world.palette, ...(v.palette || {}) },
+    fog: { ...world.fog, ...(v.fog !== undefined ? { density: v.fog } : {}) },
+    stars: v.stars !== undefined ? v.stars : world.stars,
+    fireflies: v.fireflies !== undefined ? v.fireflies : world.fireflies,
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    titles
    ═══════════════════════════════════════════════════════════════════════════ */
 
