@@ -7,7 +7,7 @@ import { createMotes } from './motes.js';
 import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
 import { createTerrain } from './terrain.js';
-import { WORLDS, createWorldContent, makePaletteCycler } from './worlds.js';
+import { WORLDS, SANCTUARY, createWorldContent, makePaletteCycler } from './worlds.js';
 import { createGate } from './gate.js';
 import { createRig } from './rig.js';
 import { createCharacter } from './character.js';
@@ -20,6 +20,7 @@ import { loadSettings, saveSettings } from './save.js';
 import { createArchive } from './archive.js';
 import { createFragments } from './fragments.js';
 import { createJournal } from './journal.js';
+import { createSanctuaryDisplay } from './sanctuary.js';
 import { createAnalytics, EVENTS } from './analytics.js';
 import { createProfileService, createLeaderboardService } from './leaderboard.js';
 import { RARITY, title, cosmetic } from './discoveries.js';
@@ -302,6 +303,26 @@ const CONFIG = {
     glowRadius: 3.4,         // halo size, relative to the body
     glowPower: 0.40,
     noticeSeconds: 3.0,      // how long the companion stays interested
+  },
+
+  /* The sanctuary's gallery: thirty-two places in four arcs, one arc per
+     world. A found memory burns in its place; an unfound one stays as a dim,
+     empty socket, which is the half of this that actually does the work — a
+     room with gaps in it is a room you want to fill. */
+  sanctuary: {
+    radius: 26,              // how far the ring of memories stands from the middle
+    arc: 1.30,               // radians one world's eight spread across
+    lift: 2.0,               // how high they float
+    bob: 0.22,
+    // These are the subject of the room, not scenery in it, so they are
+    // deliberately larger than the fragments they were found as.
+    foundScale: 1.9,
+    rarityPush: 4.2,         // how much further out a rare thing stands...
+    rarityRise: 1.5,         // ...and how much higher
+    glowRadius: 3.8,
+    glowPower: 0.42,
+    emptySize: 0.30,         // an unfound place: small...
+    emptyGlow: 0.26,         // ...and barely lit, but never absent
   },
 
   /* Debug switches, all off in play. `freeTravel` opens every gate at once so
@@ -598,6 +619,13 @@ function start() {
     },
     onTab: (t) => analytics.track(
       t === 'wanderer' ? EVENTS.profileOpened : EVENTS.archiveOpened, { tab: t }),
+    // going home is a journey, so it fades through the same light a gate does
+    inSanctuary: () => inSanctuary,
+    onSanctuary: () => {
+      journal.hide();
+      if (inSanctuary) ui.transition(() => loadWorld(returnTo));
+      else ui.transition(() => loadSanctuary());
+    },
   });
   ui.onArchive = () => {
     analytics.track(EVENTS.archiveOpened, {});
@@ -635,17 +663,26 @@ function start() {
   let gate = null;
   let cyclePalette = null;
   let fragments = null;
+  let display = null;          // the memories standing up, in the sanctuary
+  let inSanctuary = false;
+  let returnTo = 0;            // the world the sanctuary's gate returns to
   let delivered = 0;
   let gateAnnounced = false;   // "a gate has opened" is said once per visit
 
-  function loadWorld(index) {
-    worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
-    world = WORLDS[worldIndex];
+  /**
+   * Build a place. Shared by the four worlds and by the sanctuary, which is
+   * shaped exactly like a world so that every system already knows what to do
+   * with it — the only differences are gathered in `isHome` below.
+   */
+  function buildPlace(w, isHome = false) {
+    world = w;
+    inSanctuary = isHome;
     const p = world.palette;
 
     if (content) content.dispose();
     if (gate) gate.dispose();
     if (fragments) fragments.dispose();
+    if (display) { display.dispose(); display = null; }
 
     terrain.build(world);
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
@@ -676,29 +713,49 @@ function start() {
     ui.setFlashColor(p.bloom);
     audio.setWorld(world.audio);
 
-    /* Every world remembers its own visit. Arriving anywhere — for the first
-       time, after a refresh, or years later — puts back what was woken and
-       delivered there, so a world you know is visibly a world you know and
-       the monument stands where you left it. What is left to do in a world
-       you have finished is find the things you never found. */
-    const visited = archive.arrive(world.key);
-    archive.setCurrentWorld(worldIndex);
-    content.restoreAwake(visited.awakened, () => audio.addLayer());
-    delivered = visited.delivered;
+    if (isHome) {
+      /* The sanctuary keeps nothing and asks nothing. Everything in it is
+         already awake — a place you come back to should not need waking —
+         and its monument answers to the whole journey rather than to any one
+         world, so it is the single object in the game that shows everything
+         you have ever done at once. */
+      const every = [];
+      for (let i = 0; i < content.structures.length; i++) every.push(i);
+      content.restoreAwake(every, () => {});
+      const s = archive.summary();
+      delivered = 0;
+      content.setMonumentGrowth(s.completion);
+      content.setMasteryForm(archive.monumentForm(null, s.mastery));
 
-    // ...and lay out whatever memories this world is still holding. Placed
-    // after the visit is counted, so a discovery that asks for an nth visit
-    // can appear on the visit that satisfies it.
-    fragments = createFragments({
-      CONFIG, quality, scene, world, terrain, archive,
-    });
-    fragments.onNear = (it) => companion?.notice(it.x, it.y, it.z);
-    fragments.onFound = onDiscovery;
-    content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
-    content.setMasteryForm(archive.monumentForm(world.key));
+      display = createSanctuaryDisplay({
+        CONFIG, scene, world, terrain, archive,
+      });
+      analytics.track(EVENTS.sanctuaryOpened, { found: s.discoveries });
+    } else {
+      /* Every world remembers its own visit. Arriving anywhere — for the first
+         time, after a refresh, or years later — puts back what was woken and
+         delivered there, so a world you know is visibly a world you know and
+         the monument stands where you left it. What is left to do in a world
+         you have finished is find the things you never found. */
+      const visited = archive.arrive(world.key);
+      archive.setCurrentWorld(worldIndex);
+      content.restoreAwake(visited.awakened, () => audio.addLayer());
+      delivered = visited.delivered;
 
-    analytics.track(EVENTS.worldEntered,
-      { world: world.key, visits: visited.visits });
+      // ...and lay out whatever memories this world is still holding. Placed
+      // after the visit is counted, so a discovery that asks for an nth visit
+      // can appear on the visit that satisfies it.
+      fragments = createFragments({
+        CONFIG, quality, scene, world, terrain, archive,
+      });
+      fragments.onNear = (it) => companion?.notice(it.x, it.y, it.z);
+      fragments.onFound = onDiscovery;
+      content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
+      content.setMasteryForm(archive.monumentForm(world.key));
+
+      analytics.track(EVENTS.worldEntered,
+        { world: world.key, visits: visited.visits });
+    }
 
     // name the place as it comes into view — held back so it arrives with the
     // gate-light still clearing, not on top of it
@@ -722,6 +779,23 @@ function start() {
     // visit, and a program that links on the first *visible* frame is a
     // stutter exactly where the arrival should feel like an exhale.
     renderer.compile(scene, camera);
+  }
+
+  /** one of the four worlds, by index, wrapping in both directions */
+  function loadWorld(index) {
+    worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
+    buildPlace(WORLDS[worldIndex], false);
+  }
+
+  /**
+   * Go home. Remembers where you were so the sanctuary's gate can put you
+   * back — you are visiting, not moving, and the journey waits exactly where
+   * you left it.
+   */
+  function loadSanctuary() {
+    if (inSanctuary) return;
+    returnTo = worldIndex;
+    buildPlace(SANCTUARY, true);
   }
 
   /** Drop one free mote somewhere in the world, at a walkable distance. */
@@ -842,9 +916,11 @@ function start() {
   /** walk on to the next world, through the gate's soft light. The same path
       serves the walked-into ring and the tapped "step through" prompt. */
   function enterGate() {
-    const next = worldIndex + 1;
     analytics.track(EVENTS.gateEntered, { from: world.key });
     ui.setStepPrompt(false);
+    // from the sanctuary the gate is the way back to where you were; from a
+    // world it is the way on to the next one
+    const next = inSanctuary ? returnTo : worldIndex + 1;
     ui.transition(() => loadWorld(next));
   }
 
@@ -912,6 +988,7 @@ function start() {
     fireflies.setPalette(p);
     motes.setPalette(p);
     fragments?.setPalette(p);
+    display?.setPalette(p);
     character.setPalette(p);
     gate.setPalette(p);
   }
@@ -975,8 +1052,10 @@ function start() {
     // or arriving somewhere would light whatever happened to be near the spot.
     if (!ui.transitioning) {
       content.updateAwakening(dt, rig.state.x, rig.state.z, (i, s) => {
+        if (inSanctuary) return;      // nothing here sleeps, or is scored
         audio.addLayer();
         archive.noteAwakened(world.key, i, content.awake);
+        analytics.track(EVENTS.structureAwakened, { world: world.key });
         companion?.notice(s.x, s.y, s.z);   // off it goes to look
       });
     }
@@ -989,23 +1068,25 @@ function start() {
     }
 
     const arrived = motes.update(dt, ctx, rig.state, content.monumentPoint);
-    if (arrived > 0) {
+    if (arrived > 0 && !inSanctuary) {
       delivered += arrived;
       archive.noteDelivered(world.key, delivered);
+      content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
     }
-    content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
 
     // The gate opens on whichever the player has actually been doing — waking
     // structures or carrying motes to the monument — so either kind of
     // wandering leads onward. Walking into it takes you to the next world.
-    const wantedOpen = CONFIG.debug.freeTravel ? 1 : Math.max(
+    // The sanctuary's gate is your own front door: always open, and it leads
+    // back to the journey rather than on to the next world.
+    const wantedOpen = (inSanctuary || CONFIG.debug.freeTravel) ? 1 : Math.max(
       content.awakeFraction / CONFIG.awaken.gateAt,
       delivered / (CONFIG.motes.monumentTarget * CONFIG.gate.gatherAt)
     );
     gate.update(dt, ctx, wantedOpen);
 
     // say so, quietly, the moment it would admit you
-    if (!gateAnnounced && gate.enterable) {
+    if (!gateAnnounced && gate.enterable && !inSanctuary) {
       gateAnnounced = true;
       if (ui.began) ui.announce('a gate has opened');
     }
@@ -1033,7 +1114,9 @@ function start() {
     // An unfound memory outranks everything: it is the rarest thing in view
     // and the eyes finding it a moment before the player does is the gentlest
     // hint the game can give.
-    const frag = fragments.nearestTo(rig.state.x, rig.state.z, 22);
+    const frag = fragments
+      ? fragments.nearestTo(rig.state.x, rig.state.z, 22)
+      : display?.nearestTo(rig.state.x, rig.state.z, 16);
     if (frag) {
       character.lookToward(frag.x, frag.z);
     } else if (gateCall > 0.25) {
@@ -1045,7 +1128,8 @@ function start() {
     }
 
     // the memories this world is still holding, and how near we are to one
-    if (!ui.transitioning) fragments.update(dt, ctx, rig.state);
+    if (!ui.transitioning) fragments?.update(dt, ctx, rig.state);
+    display?.update(dt, ctx);
 
     companion?.update(dt, ctx, rig.state, gate);
 
@@ -1054,7 +1138,7 @@ function start() {
     lights.length = 0;
     for (const m of motes.nearestTo(camera.position, CONFIG.ground.lights)) lights.push(m);
     content.nearestAwake(camera.position, CONFIG.ground.lights, lights);
-    fragments.lights(lights, CONFIG.ground.lights, camera.position);
+    fragments?.lights(lights, CONFIG.ground.lights, camera.position);
     lights.sort(byDistance);
     if (lights.length > CONFIG.ground.lights) lights.length = CONFIG.ground.lights;
     terrain.setLights(lights);
@@ -1102,7 +1186,11 @@ function start() {
     get gate() { return gate; },
     get motes() { return motes; },
     get fragments() { return fragments; },
+    get display() { return display; },
+    get inSanctuary() { return inSanctuary; },
     journal,
+    /** visit the sanctuary, or come back from it */
+    home() { inSanctuary ? loadWorld(returnTo) : loadSanctuary(); return world.key; },
     /** walk to the nearest unfound memory, for looking at one on purpose */
     toFragment() {
       const f = fragments.nearestTo(rig.state.x, rig.state.z, 1e6);

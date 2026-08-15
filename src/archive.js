@@ -392,9 +392,13 @@ export function createArchive({ worlds, monumentTarget }) {
       return cosmetic('companion', data.equipped.companion)?.color ?? null;
     },
 
-    /** what the monument should look like here, from this world's mastery */
-    monumentForm(key) {
-      return monumentForm(mastery(key).value);
+    /**
+     * What the monument should look like. Normally from one world's mastery;
+     * the sanctuary passes `null` and its own number instead, because the
+     * monument there answers to the whole journey rather than to any one place.
+     */
+    monumentForm(key, override) {
+      return monumentForm(override !== undefined ? override : mastery(key).value);
     },
 
     unlock,

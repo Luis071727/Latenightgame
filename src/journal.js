@@ -18,6 +18,7 @@ import {
  */
 export function createJournal({
   archive, worlds, leaderboard, profiles, onClose, onEquip, onTab,
+  inSanctuary, onSanctuary,
 }) {
   const root = document.getElementById('journal');
   const bodyEl = root.querySelector('.j-body');
@@ -117,6 +118,15 @@ export function createJournal({
     mm.appendChild(meter(s.mastery));
     mm.appendChild(el('j-note', `${pct(s.mastery)} across all four.`));
     out.appendChild(mm);
+
+    // the way home. The only button in the archive that goes anywhere.
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'j-go';
+    const home = inSanctuary?.();
+    go.textContent = home ? 'back to the journey' : 'visit your sanctuary';
+    go.addEventListener('click', () => onSanctuary?.());
+    out.appendChild(go);
 
     out.appendChild(el('j-quiet',
       'Nothing here expires, and nothing is lost by staying away. '

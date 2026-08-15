@@ -172,6 +172,58 @@ export const WORLDS = [
   },
 ];
 
+/**
+ * The sanctuary — the one place that is yours.
+ *
+ * Shaped exactly like a world so that every system already knows how to build
+ * it, but it is not in the rotation and no gate leads here: you go because you
+ * chose to, from the archive, and its gate takes you back to wherever you
+ * were. Nothing sleeps here, there is nothing to find and nothing to master.
+ * It is small, warm, and already awake — the one place in the game that asks
+ * nothing at all of you.
+ */
+export const SANCTUARY = {
+  key: 'sanctuary',
+  name: 'your sanctuary',
+  seed: 7,
+  sanctuary: true,
+  palette: {
+    skyTopA:    0x2e2a44,
+    skyTopB:    0x3a3050,
+    skyHorizon: 0x584458,
+    horizonGlow:0x36221e,
+    fog:        0x3b3246,
+    groundLow:  0x323848,
+    groundHigh: 0x6a6478,
+    fractalLow: 0x554a68,
+    fractalHigh:0xd8c0a8,
+    bloom:      0xffe0bc,
+    mote:       0xffd8b0,
+    firefly:    0xffdcc0,
+    haze:       0x60506a,
+    cloud:      0x6a5668,
+    cloakLow:   0x3d3550,
+    cloakHigh:  0x8a7c9e,
+    cloakRim:   0xd8bfc0,
+    cloakGlow:  0xffd6a8,
+    shadow:     0x2a2434,
+  },
+  fog:    { density: 0.0105 },
+  // Deliberately small: you should be able to see the whole of it from the
+  // middle, which is what makes it feel like somewhere rather than another
+  // world. `ambient` is kept down with the rest of them — a home that is
+  // brighter than everywhere else stops being part of the same night.
+  ground: { radius: 76, amp: 2.6, freq: 0.020, plazaRadius: 22, rim: 4.5, drop: 20, ambient: 0.70 },
+  species: 'tree',
+  structures: { count: 9, minHeight: 5.5, maxHeight: 9.5, radius: 0.55, sway: 0.07, spacing: 17 },
+  monument: { type: 'ring', size: 4.2 },
+  clouds: { height: 30, spacing: 12, size: 380, scale: 0.0068, drift: 0.6, amount: 0.18, color: 0x6a5668 },
+  water: null,
+  stars: 0.45,
+  fireflies: 1.1,
+  audio: { root: 146.83, scale: [0, 4, 7, 12, 16], brightness: 520 },
+};
+
 /* ═══════════════════════════════════════════════════════════════════════════
    the slow colour drift
    ═══════════════════════════════════════════════════════════════════════════ */

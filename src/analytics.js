@@ -27,6 +27,7 @@ export const EVENTS = {
   cosmeticEquipped: 'cosmetic_equipped',
   gateEntered: 'gate_entered',
   archiveOpened: 'archive_opened',
+  sanctuaryOpened: 'sanctuary_opened',
   profileOpened: 'profile_opened',
 };
 
