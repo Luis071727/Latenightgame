@@ -52,9 +52,12 @@ const CONFIG = {
   vignette: { amount: 0.85, radius: 0.80, softness: 0.58, dither: 1.0 },
 
   camera: {
-    height: 4.5,             // eye height above the water, like a low dock
-    lookAtHeight: 6.6,       // pitched slightly up: more sky than lake
-    lookAtDistance: 34,
+    // First person, at the waterline: eye height of someone sitting on a low
+    // jetty with their feet near the surface. Anything much above ~2 starts to
+    // read as looking down on the lake from a drone.
+    height: 1.6,
+    lookAtRise: 2.1,         // how much higher than the eye the gaze lands...
+    lookAtDistance: 34,      // ...at this distance, i.e. pitched slightly up
     fovPortrait: 72,
     fovLandscape: 62,
     bob: 0.055,              // vertical breathing; 0 is perfectly still
@@ -92,14 +95,14 @@ const CONFIG = {
     // past ~1.4 and the tone curve clips the amber toward white.
     glow: 1.15,
     glowRadius: 2.3,         // glow card size, relative to the lantern
-    glowPower: 0.48,         // brightness of the flame's core + halo
+    glowPower: 0.40,         // brightness of the flame's core + halo
     drag: 0.55,              // per-second velocity decay back to stillness
     fadeStartY: 30,
     fadeEndY: 66,
     despawnDistance: 260,    // recycled once this far from the camera
   },
 
-  spawn: { nearest: 8, farthest: 80, fallbackDistance: 34 },
+  spawn: { nearest: 7, farthest: 70, fallbackDistance: 26 },
 
   /* Drifting across the lake. Two fingers to steer and glide; WASD or the
      arrow keys on a laptop. Everything is capped and heavily damped — this
@@ -139,7 +142,7 @@ const CONFIG = {
 
   fireflies: { count: 14, brightness: 1.5, range: 46 },
 
-  haze: { radius: 110, height: 11, amount: 0.30, centerY: 2.6 },
+  haze: { radius: 110, height: 7.5, amount: 0.30, centerY: 1.5 },
 
   input: {
     dragThreshold: 14,       // px before a touch counts as a drag, not a tap

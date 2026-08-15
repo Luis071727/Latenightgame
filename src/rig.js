@@ -77,9 +77,11 @@ export function createRig({ CONFIG, camera }) {
       );
 
       const wander = Math.sin(time * 0.05) * 0.6 * cameraMotion;
+      // the gaze target is relative to the eye, so changing the camera height
+      // moves the whole view rather than re-pitching it
       lookAt.set(
         camera.position.x + forward.x * CONFIG.camera.lookAtDistance + right.x * wander,
-        CONFIG.camera.lookAtHeight + bobY,
+        camera.position.y + CONFIG.camera.lookAtRise,
         camera.position.z + forward.z * CONFIG.camera.lookAtDistance + right.z * wander
       );
       camera.lookAt(lookAt);

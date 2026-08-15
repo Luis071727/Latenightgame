@@ -1,8 +1,9 @@
 # Night Lanterns
 
-A calm, endless bedtime scene. Tap a dark lake to release a glowing paper lantern
-and watch it drift up into the stars. No score, no goals, no fail state, no timers —
-just something quiet to hold for a few minutes before sleep.
+A calm, endless bedtime scene, seen first person from the waterline. Tap a dark
+lake to release a glowing paper lantern and watch it drift up into the stars.
+No score, no goals, no fail state, no timers — just something quiet to hold for
+a few minutes before sleep.
 
 - **Tap** — release a lantern.
 - **Hold** — release a larger, brighter one that climbs more slowly.
@@ -140,6 +141,11 @@ A few decisions worth knowing about if you go editing:
   scatters a reflection along the view direction, so the shader is patched to walk
   several taps up and down the mirror texture. The taps are evenly spaced on
   purpose: randomised offsets turn a star, one or two pixels across, into speckle.
+- **The eye sits at the waterline.** `camera.height` is 1.6 — head height for
+  someone sitting on a low jetty. It is the single number that decides whether
+  the scene reads as first person or as a drone shot; much above 2 and you are
+  looking down on the lake. `camera.lookAtRise` is relative to the eye, so
+  changing the height moves the whole view instead of re-pitching it.
 - **The sky rides with you.** The dome and both star shells follow the camera, so
   crossing the lake doesn't swing the constellations overhead. Fireflies wrap
   around you instead, and lanterns are recycled by distance from the camera
