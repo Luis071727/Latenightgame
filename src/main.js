@@ -19,6 +19,7 @@ import { createUI } from './ui.js';
 import { loadSettings, saveSettings } from './save.js';
 import { createArchive } from './archive.js';
 import { createFragments } from './fragments.js';
+import { createJournal } from './journal.js';
 import { RARITY, title, cosmetic } from './discoveries.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -573,6 +574,16 @@ function start() {
       'You have seen everything it had to show you.', 'mythic');
   };
 
+  /* The archive as a page. Equipping from it applies immediately — the mood
+     pass picks the new cloak up on its next tick, a quarter second away. */
+  const journal = createJournal({
+    archive,
+    worlds: WORLDS,
+    onClose: () => ui.keepAwake(),
+    onEquip: () => ui.keepAwake(),
+  });
+  ui.onArchive = () => journal.show();
+
   ui.onSettingsSave = saveSettings;
   ui.onBegin = () => ui.showWorldName(world.name, 1400);
   ui.onStep = () => {
@@ -1064,6 +1075,7 @@ function start() {
     get gate() { return gate; },
     get motes() { return motes; },
     get fragments() { return fragments; },
+    journal,
     /** walk to the nearest unfound memory, for looking at one on purpose */
     toFragment() {
       const f = fragments.nearestTo(rig.state.x, rig.state.z, 1e6);

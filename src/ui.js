@@ -102,6 +102,7 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const qualityEl = document.getElementById('set-quality');
   const paceEl = document.getElementById('set-pace');
   const resetEl = document.getElementById('set-reset');
+  const archiveEl = document.getElementById('set-archive');
   const RESET_LABEL = resetEl.textContent;
 
   let saveTimer = null;
@@ -320,6 +321,14 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
     setStepPrompt(visible) {
       stepEl.classList.toggle('show', !!visible);
     },
+
+    /** main installs what opening the archive does, once the journal exists */
+    set onArchive(fn) {
+      archiveEl.addEventListener('click', () => { closePanel(); fn?.(); });
+    },
+
+    /** the archive is a settled place; the sleep timer should not run there */
+    keepAwake() { touch(); },
 
     /** main installs what stepping through actually does */
     set onStep(fn) {
