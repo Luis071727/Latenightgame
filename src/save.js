@@ -13,6 +13,7 @@
 
 const SETTINGS_KEY = 'soft-worlds:settings';
 const JOURNEY_KEY = 'soft-worlds:journey';
+const ARCHIVE_KEY = 'soft-worlds:archive';
 
 function read(key) {
   try {
@@ -87,4 +88,44 @@ export function saveJourney(journey) {
 
 export function eraseJourney() {
   erase(JOURNEY_KEY);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   the archive
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Everything the player keeps between visits: discoveries, mastery, unlocks,
+ * what they are wearing. `archive.js` owns the shape and the migration; this
+ * only knows how to get it in and out.
+ *
+ * The old journey record is read as a fallback so that a player who last
+ * played before any of this existed is handed forward rather than started
+ * over — `migrate` in archive.js recognises that shape by its missing version.
+ */
+export function loadArchive() {
+  return read(ARCHIVE_KEY);
+}
+
+/**
+ * The pre-archive journey record, if one is still lying about.
+ *
+ * Read separately from the archive rather than as a fallback for it, because
+ * the archive is written eagerly the moment the game starts: fall back only
+ * when the archive is missing and a single unlucky load — a refresh at the
+ * wrong moment, a crash — could leave a real player's progress stranded
+ * behind an empty archive that now exists. `migrate` merges this in whenever
+ * it has not already been merged, and records that it did.
+ */
+export function loadLegacyJourney() {
+  return read(JOURNEY_KEY);
+}
+
+export function saveArchive(archive) {
+  write(ARCHIVE_KEY, archive);
+}
+
+export function eraseArchive() {
+  erase(ARCHIVE_KEY);
+  erase(JOURNEY_KEY);      // ...including the record it was migrated from
 }
