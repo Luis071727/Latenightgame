@@ -29,6 +29,10 @@ export function createInput({ CONFIG, camera, domElement, onWake, onTap }) {
   // camera basis on the ground plane, recomputed each time nav is drained
   const camForward = new THREE.Vector3();
   const dir = new THREE.Vector3();
+  // the one nav result, reused every frame — takeNav is called from the main
+  // loop, and a fresh object per frame is sixty allocations a second for
+  // nothing
+  const nav = { x: 0, z: 0, strength: 0 };
 
   function showStick(x, y) {
     if (!stickEl) return;
@@ -174,8 +178,10 @@ export function createInput({ CONFIG, camera, domElement, onWake, onTap }) {
                - (keys.has('w') || keys.has('ArrowUp') ? 1 : 0);
       sx += kx; sy += ky;
 
+      nav.x = 0; nav.z = 0; nav.strength = 0;
+
       const strength = Math.min(1, Math.hypot(sx, sy));
-      if (strength < 0.001) return { x: 0, z: 0, strength: 0 };
+      if (strength < 0.001) return nav;
 
       // rotate the screen request into the world using the camera's own
       // heading, so "up" always means "away from the viewer" however far the
@@ -194,10 +200,11 @@ export function createInput({ CONFIG, camera, domElement, onWake, onTap }) {
         0,
         rz * sx - camForward.z * sy
       );
-      if (dir.lengthSq() < 1e-6) return { x: 0, z: 0, strength: 0 };
+      if (dir.lengthSq() < 1e-6) return nav;
       dir.normalize();
 
-      return { x: dir.x, z: dir.z, strength };
+      nav.x = dir.x; nav.z = dir.z; nav.strength = strength;
+      return nav;
     },
 
     /** true while a finger or a movement key is asking to go somewhere */

@@ -7,7 +7,7 @@
  * far more noticeable than simply running one notch below perfect.
  */
 
-const TIER_ORDER = ['low', 'medium', 'high'];
+const TIER_ORDER = ['saver', 'low', 'medium', 'high'];
 
 /**
  * @returns {{tier: string, pinned: boolean}} `pinned` means the tier was asked
@@ -45,8 +45,9 @@ function guessTier() {
 
   const g = gpu.toLowerCase();
 
-  // Software rasterisers can't handle the reflection pass at any size.
-  if (/swiftshader|llvmpipe|software|basic render/.test(g)) return 'low';
+  // Software rasterisers are fill-rate bound before anything else, so they
+  // want the tier that draws the fewest pixels, not merely fewer things.
+  if (/swiftshader|llvmpipe|software|basic render/.test(g)) return 'saver';
 
   // Desktop discrete / Apple silicon
   if (/nvidia|geforce|radeon rx|apple m\d/.test(g)) return 'high';
@@ -56,6 +57,9 @@ function guessTier() {
     if (/apple a1[4-9]|apple a2\d/.test(g)) return 'high';
     if (/adreno \(tm\) [67]\d\d|mali-g[78]\d/.test(g)) return 'high';
     if (cores >= 6 && mem >= 4) return 'medium';
+    // Two cores or a gigabyte of RAM is a phone that will thermally throttle
+    // long before it drops a frame, and this is meant to be left running.
+    if (cores <= 4 && mem <= 2) return 'saver';
     return 'low';
   }
 

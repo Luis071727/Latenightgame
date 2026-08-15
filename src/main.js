@@ -339,13 +339,26 @@ const CONFIG = {
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
-      maxMotes: 22, starScale: 0.45, particleScale: 0.6,
+      maxMotes: 20, starScale: 0.45, particleScale: 0.6,
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
       groundCells: 64,
-      fractalDepth: 3, fractalInstances: 1600, structureScale: 0.6,
+      fractalDepth: 3, fractalInstances: 1400, structureScale: 0.6,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 1, kaleidoscope: false,
       charSegments: 11, charShadow: false,
-      bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.25,
+      bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.2,
+    },
+    /* The floor. Meant for a phone that would rather stay cool than look its
+       best — and for the software rasterisers, which are fill-rate bound long
+       before they are geometry bound, so what matters most here is the pixel
+       ratio and the transparent sheets, not the instance count. */
+    saver: {
+      maxMotes: 14, starScale: 0.30, particleScale: 0.40,
+      reflections: false, reflectionSize: 0, waterNormalSize: 64,
+      groundCells: 48,
+      fractalDepth: 3, fractalInstances: 900, structureScale: 0.45,
+      mengerDepth: 1, blockSegments: 1, cloudLayers: 0, kaleidoscope: false,
+      charSegments: 9, charShadow: false,
+      bloom: false, bloomScale: 0.30, msaa: 0, pixelRatio: 1.0,
     },
   },
 };
@@ -402,6 +415,10 @@ function start() {
   // materials render linear HDR into the composer's half-float targets.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CONFIG.render.exposure;
+  // The composer renders several times a frame and each render would reset the
+  // counters, leaving `info` describing the last fullscreen quad rather than
+  // the frame. Reset once, ourselves, at the top of the loop instead.
+  renderer.info.autoReset = false;
   document.body.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -553,6 +570,12 @@ function start() {
     for (let i = 0; i < Math.min(CONFIG.motes.perWorld, quality.maxMotes) * 0.6; i++) {
       spawnMote();
     }
+
+    // Warm every new shader now, while the screen is still full of gate-light
+    // (or the title, on the first load). A world's materials are new each
+    // visit, and a program that links on the first *visible* frame is a
+    // stutter exactly where the arrival should feel like an exhale.
+    renderer.compile(scene, camera);
   }
 
   /** Drop one free mote somewhere in the world, at a walkable distance. */
@@ -706,13 +729,19 @@ function start() {
   let ambientAt = 2;
   let moodAt = 0;
 
+  // a rolling frame rate, for tuning from the console. Smoothed hard enough
+  // that a number read off it by eye means something.
+  let fps = 60;
+
   function frame(now) {
     const rawDt = now - last;
     last = now;
     const dt = Math.min(rawDt / 1000, 0.05);   // clamp after a tab switch
     time += dt;
 
+    if (rawDt > 0 && rawDt < 400) fps += (1000 / rawDt - fps) * 0.05;
     if (frameWatch.sample(rawDt)) downgrade();
+    renderer.info.reset();
 
     const phase = (time / CONFIG.mood.periodSeconds) * Math.PI * 2;
     ctx.time = time;
@@ -859,6 +888,21 @@ function start() {
     get world() { return world.key; },
     get instances() { return content.instances; },
     get structures() { return content.structures; },
+
+    /** what the renderer is actually doing, for tuning a tier by hand */
+    get perf() {
+      const info = renderer.info.render;
+      return {
+        fps: Math.round(fps),
+        tier: tierName,
+        instances: content.instances,
+        motes: motes.count,
+        drawCalls: info.calls,
+        triangles: info.triangles,
+        pixelRatio: +pixelRatio.toFixed(2),
+        programs: renderer.info.programs?.length ?? 0,
+      };
+    },
     /** where the loop currently stands, for tuning it without playing it */
     get progress() {
       return {

@@ -497,8 +497,10 @@ export function createWorldContent({ CONFIG, quality, scene, world, terrain }) {
         let at = nearAwake.length;
         while (at > 0 && nearAwake[at - 1].dist2 > s.dist2) at--;
         if (at >= k) continue;
-        nearAwake.splice(at, 0, s);
-        if (nearAwake.length > k) nearAwake.length = k;
+        // shift-insert by hand — splice allocates, and this is per frame
+        if (nearAwake.length < k) nearAwake.length++;
+        for (let j = nearAwake.length - 1; j > at; j--) nearAwake[j] = nearAwake[j - 1];
+        nearAwake[at] = s;
       }
       for (const s of nearAwake) out.push(s);
       return out;

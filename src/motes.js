@@ -160,9 +160,11 @@ export function createMotes({ CONFIG, quality, scene }) {
   let heldCount = 0;
 
   function spawn(x, y, z) {
-    let s;
     if (active.length >= capacity) return null;   // never evict a held mote
-    s = slots.find((v) => !v.active);
+    let s = null;
+    for (let i = 0; i < slots.length; i++) {
+      if (!slots[i].active) { s = slots[i]; break; }
+    }
     if (!s) return null;
 
     s.active = true;
@@ -266,7 +268,10 @@ export function createMotes({ CONFIG, quality, scene }) {
         const dx = s.x - to.x, dy = s.y - to.y, dz = s.z - to.z;
         if (dx * dx + dy * dy + dz * dz < M.arriveRadius * M.arriveRadius) {
           s.active = false;
-          active.splice(i, 1);
+          // swap-remove: instance order is repacked every frame anyway, and
+          // splice allocates its removed-elements array on every delivery
+          active[i] = active[active.length - 1];
+          active.pop();
           delivered++;
           continue;
         }
@@ -367,8 +372,11 @@ export function createMotes({ CONFIG, quality, scene }) {
         let at = nearest.length;
         while (at > 0 && nearest[at - 1].dist2 > s.dist2) at--;
         if (at >= k) continue;
-        nearest.splice(at, 0, s);
-        if (nearest.length > k) nearest.length = k;
+        // shift-insert by hand: splice allocates its return array every call,
+        // and this runs for every lit mote every frame
+        if (nearest.length < k) nearest.length++;
+        for (let j = nearest.length - 1; j > at; j--) nearest[j] = nearest[j - 1];
+        nearest[at] = s;
       }
       return nearest;
     },

@@ -237,6 +237,7 @@ export function createCharacter({ CONFIG, quality, scene }) {
   }
 
   const localMove = new THREE.Vector2();
+  const glowWorld = new THREE.Vector3();   // reused; glowPosition allocates nothing
   let lean = 0;
   let pitch = 0;
   let bobPhase = 0;
@@ -245,8 +246,9 @@ export function createCharacter({ CONFIG, quality, scene }) {
     group,
     robe,
 
-    /** world position of the light at the chest, for anything that wants it */
-    get glowPosition() { return glow.getWorldPosition(new THREE.Vector3()); },
+    /** world position of the light at the chest, for anything that wants it.
+        Returns a shared scratch vector — copy it if you need to keep it. */
+    get glowPosition() { return glow.getWorldPosition(glowWorld); },
 
     /**
      * Re-tint for a new world. Called on a world swap rather than per frame —
