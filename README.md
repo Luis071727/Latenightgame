@@ -13,9 +13,10 @@ a few minutes before sleep.
   Sideways steers, up and down glides.
 - **Keyboard** — `W`/`A`/`S`/`D` or the arrow keys do the same on a laptop.
 
-The lake has islands on it — low wooded silhouettes scattered from just over the
-horizon out to a few minutes' drift away. Lanterns stay where you released them,
-so you can leave a trail of them behind you and come back to it.
+The lake has islands on it, and you can land on them. Drift up to a beach and
+walk out of the water onto sand — the ground rises under you, the gliding turns
+into walking, and lanterns released ashore sit on the sand and light it. Lanterns
+stay where you left them, so you can leave a trail behind you and come back to it.
 
 Everything decays back to stillness on its own. After about ten minutes without a
 touch the scene dims itself to black so it won't glow all night; any tap brings it back.
@@ -94,9 +95,14 @@ more noticeable than sitting one notch below perfect.
 | Max lanterns | 40 | 30 | 20 |
 | Star count | 100% | 70% | 45% |
 | Pixel ratio cap | 2 | 1.75 | 1.25 |
+| Terrain detail | ~53k tris | ~25k | ~14k |
 
 Append `?tier=high`, `?tier=medium` or `?tier=low` to the URL to force one. A
 forced tier is pinned — the frame watcher won't override a deliberate choice.
+
+Terrain resolution is fixed when the scene starts, so an automatic downgrade
+mid-session sheds the reflection pass and bloom but keeps the ground it has
+already built. Reload to rebuild it coarser.
 
 ## How it's put together
 
@@ -110,7 +116,7 @@ src/water.js        the lake (Water addon, or a shaded plane on low)
 src/lanterns.js     one InstancedMesh for every lantern
 src/fireflies.js    points animated entirely in the vertex shader
 src/haze.js         horizon mist band
-src/islands.js      the archipelago, merged into one draw call
+src/terrain.js      island heightfields, the sand shader, and heightAt()
 src/rig.js          where you are on the lake and which way you face
 src/holdglow.js     the pool of light under a held finger
 src/input.js        tap / hold / drag
@@ -146,6 +152,29 @@ A few decisions worth knowing about if you go editing:
   the scene reads as first person or as a drone shot; much above 2 and you are
   looking down on the lake. `camera.lookAtRise` is relative to the eye, so
   changing the height moves the whole view instead of re-pitching it.
+- **Each island is its own mesh, deliberately.** Merging the archipelago into
+  one draw call also merges it into one bounding volume, so the whole terrain
+  gets submitted every frame even when most of it is behind you — and the
+  water's reflection pass draws it a second time. Thirteen draw calls cost far
+  less than the vertices the frustum can reject: measured on the high tier,
+  a frame facing an island draws about 39k of the 53k triangles available.
+- **The dunes are coarse geometry on purpose.** Ripples and grain live in the
+  fragment shader, so the mesh only has to carry the large forms. Halving the
+  vertex density is invisible on the beach and halves what the reflection pass
+  has to redraw.
+- **The islands are heightfields, and one function defines them.** `heightAt()`
+  both displaces the mesh vertices and answers where the camera's feet are, so
+  what you walk on is exactly what you see — there is no second collision
+  approximation to drift out of sync with the art. Normals come from central
+  differences on the same function rather than from the triangles, which is
+  exact and cannot seam where islands are merged together.
+- **Sand is shaded, not textured.** Ripples are an analytic slope, grain is a
+  finite difference on noise, and both perturb the normal rather than tinting
+  the colour — sand catches light, it isn't speckled with dark spots. The grain
+  fades out with distance: left on, it aliases into blotches that read as
+  gravel. The nearest few lanterns are fed in as real point lights, which is
+  what makes it look like a surface at all; lit only by the sky it is a flat
+  grey shape.
 - **The sky rides with you.** The dome and both star shells follow the camera, so
   crossing the lake doesn't swing the constellations overhead. Fireflies wrap
   around you instead, and lanterns are recycled by distance from the camera

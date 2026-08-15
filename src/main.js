@@ -6,7 +6,7 @@ import { createWater } from './water.js';
 import { createLanterns } from './lanterns.js';
 import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
-import { createIslands } from './islands.js';
+import { createTerrain } from './terrain.js';
 import { createRig } from './rig.js';
 import { createHoldGlow } from './holdglow.js';
 import { createPost } from './post.js';
@@ -33,7 +33,10 @@ const CONFIG = {
     lanternCool: 0xff8f4d,   // the other end of the lantern tint range
     firefly:     0xffd08a,
     haze:        0x2a3352,
-    island:      0x05070e,   // island silhouettes, barely above the horizon
+    sand:        0x9c907a,   // dry sand, as it would look under a warm light
+    sandWet:     0x4a4234,   // darker where the lake has been over it
+    tree:        0x05070e,   // conifers against the sky: near-black is right
+    treeLit:     0x2f3a2a,   // ...but this is what lantern light lands on
   },
 
   render: {
@@ -100,6 +103,7 @@ const CONFIG = {
     fadeStartY: 30,
     fadeEndY: 66,
     despawnDistance: 260,    // recycled once this far from the camera
+    lightRange: 26,          // how far a lantern's light reaches onto sand
   },
 
   spawn: { nearest: 7, farthest: 70, fallbackDistance: 26 },
@@ -116,16 +120,38 @@ const CONFIG = {
     touchGlide: 0.10,        // units/sec² per px held away from the origin
     keyTurn: 1.6,            // radians/sec² while a turn key is held
     keyGlide: 9.0,           // units/sec² while a glide key is held
+    // ashore you walk instead of gliding: slower, and it stops when you do
+    landMaxSpeed: 1.7,
+    landDamping: 0.02,
+    groundFollow: 7.0,       // how quickly the eye settles onto the ground
+    strideRate: 1.5,         // footfalls per unit walked
+    strideBob: 0.035,        // vertical footfall movement
+    strideSway: 0.022,       // ...and the sideways part of it
   },
 
-  /* The archipelago you drift toward. */
+  /* The archipelago you drift toward — and can land on and walk around. */
   islands: {
     seed: 7,
-    count: 16,
-    minDistance: 70, maxDistance: 470,
-    minRadius: 12, maxRadius: 42,
-    minHeight: 3.5, maxHeight: 13,
-    maxTrees: 6, treeHeight: 6.5,
+    count: 13,
+    minDistance: 55, maxDistance: 430,
+    minRadius: 15, maxRadius: 30,
+    minHeight: 2.2, maxHeight: 7.5,
+    cellSize: 1.0,           // metres per terrain quad; smaller = finer dunes
+    underwaterDrop: 2.4,     // how far the ground sinks past the shoreline
+    shoreAt: 0.92,           // fraction of the radius where the sand meets water
+    beachFalloff: 1.7,       // >1 gives a long shallow toe you can stand on
+    shoreScale: 0.05,        // noise frequency that makes the coastline wander
+    shoreWobble: 0.11,       // ...and how far it wanders, as a fraction of radius
+    duneScale: 0.085,        // dune noise frequency
+    duneAmount: 0.42,        // ...and how much of the island height it moves
+    grain: 0.030,            // per-pixel sand grain, as a normal slope
+    ripple: 0.11,            // depth of the ripples the water leaves behind
+    detailFade: 0.05,        // how quickly grain fades with distance
+    ambient: 0.55,           // how much of the night sky the sand catches
+    sandLights: 6,           // nearest lanterns that light the beach
+    lightPower: 3.2,         // brightness of a lantern falling on sand
+    treeMinHeight: 1.4,      // no conifers down on the wet sand
+    maxTrees: 7, treeHeight: 5.5,
     fogDensity: 0.0035,      // how far away they melt into the horizon
   },
 
@@ -177,16 +203,19 @@ const CONFIG = {
     high: {
       maxLanterns: 40, starScale: 1.0, particleScale: 1.0,
       reflections: true, reflectionSize: 512, waterNormalSize: 256,
+      terrainCell: 1.5,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
       maxLanterns: 30, starScale: 0.7, particleScale: 0.8,
       reflections: true, reflectionSize: 256, waterNormalSize: 128,
+      terrainCell: 2.2,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
       maxLanterns: 20, starScale: 0.45, particleScale: 0.6,
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
+      terrainCell: 3.0,
       bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.25,
     },
   },
@@ -239,8 +268,8 @@ function start() {
   let lanterns   = createLanterns({ CONFIG, quality, scene });
   let fireflies  = createFireflies({ CONFIG, quality, scene });
   let haze       = createHaze({ CONFIG, scene });
-  const islands  = createIslands({ CONFIG, scene });
-  const rig      = createRig({ CONFIG, camera });
+  const terrain  = createTerrain({ CONFIG, quality, scene });
+  const rig      = createRig({ CONFIG, camera, terrain });
   let holdGlow   = createHoldGlow({ CONFIG, scene });
   let post       = createPost({ CONFIG, quality, renderer, scene, camera });
 
@@ -256,7 +285,7 @@ function start() {
       // the tap that wakes the scene from a deep fade only brings the light
       // back; it shouldn't also drop a lantern
       if (ui.consumeWakeTap()) return;
-      lanterns.release(x, z, bigness);
+      lanterns.release(x, z, bigness, terrain.heightAt(x, z));
     },
   });
 
@@ -358,6 +387,8 @@ function start() {
     }
     rig.update(dt, time, cameraMotion);
 
+    terrain.setLights(lanterns.nearestTo(camera.position, CONFIG.islands.sandLights));
+
     sky.update(dt, ctx);
     water.update(dt, ctx);
     lanterns.update(dt, ctx);
@@ -385,7 +416,7 @@ function start() {
     get lanterns() { return lanterns.count; },
     /** force the next quality step down, as the frame watcher would */
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
-    renderer, scene, camera, rig,
+    renderer, scene, camera, rig, terrain,
   };
 }
 

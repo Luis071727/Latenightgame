@@ -188,18 +188,19 @@ export function createLanterns({ CONFIG, quality, scene }) {
       active: false,
       x: 0, y: 0, z: 0, vx: 0, vz: 0,
       size: 1, scale: 1, rise: 0, phase: 0, spin: 0, rot: 0,
-      life: 0, alpha: 0, vis: 0, glow: 1,
+      life: 0, alpha: 0, vis: 0, glow: 1, dist2: 0,
       tint: new THREE.Color(),
     });
   }
   const active = [];               // slots currently in the air, oldest first
+  const nearest = [];              // scratch for nearestTo, never reallocated
 
   const dummy = new THREE.Object3D();
   const warm = new THREE.Color(CONFIG.palette.lanternWarm);
   const cool = new THREE.Color(CONFIG.palette.lanternCool);
   const tmpColor = new THREE.Color();
 
-  function release(x, z, bigness = 0) {
+  function release(x, z, bigness = 0, groundY = 0) {
     let s;
     if (active.length >= capacity) {
       s = active.shift();           // recycle the oldest rather than refuse
@@ -210,7 +211,7 @@ export function createLanterns({ CONFIG, quality, scene }) {
 
     const size = L.baseSize + bigness * L.sizeRange;
     s.active = true;
-    s.x = x; s.y = 0.34; s.z = z;
+    s.x = x; s.y = groundY + 0.34; s.z = z;   // sits on sand, or on the lake
     s.vx = 0; s.vz = 0;
     s.size = size;
     s.scale = size * 0.35;          // grows in as it lifts off the water
@@ -337,6 +338,29 @@ export function createLanterns({ CONFIG, quality, scene }) {
     get count() { return active.length; },
     /** live positions, so the reflection system can mirror them */
     get active() { return active; },
+
+    /**
+     * The `k` lanterns nearest a point, brightest-weighted, for lighting the
+     * sand. Sorting the whole list every frame would be wasteful, so this
+     * keeps a small running top-k instead — at these counts it is a handful
+     * of comparisons.
+     */
+    nearestTo(point, k) {
+      nearest.length = 0;
+      for (const s of active) {
+        if (s.vis <= 0.01) continue;
+        const dx = s.x - point.x, dy = s.y - point.y, dz = s.z - point.z;
+        s.dist2 = dx * dx + dy * dy + dz * dz;
+        if (s.dist2 > L.lightRange * L.lightRange) continue;
+
+        let at = nearest.length;
+        while (at > 0 && nearest[at - 1].dist2 > s.dist2) at--;
+        if (at >= k) continue;
+        nearest.splice(at, 0, s);
+        if (nearest.length > k) nearest.length = k;
+      }
+      return nearest;
+    },
     dispose() {
       scene.remove(mesh);
       scene.remove(glowMesh);
