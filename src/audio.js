@@ -19,9 +19,13 @@ export function createAudio(CONFIG) {
 
   let ctx = null;
   let master = null;
+  let musicBus = null;       // the drone and the awakening layers
+  let ambienceBus = null;    // the noise wash
   let padFilter = null;
   let muted = false;
   let dim = 1;
+  let musicVolume = 1;
+  let ambienceVolume = 1;
 
   const layers = [];         // { oscA, oscB, gain }
   let voicing = A.chord;     // the semitone offsets the current world uses
@@ -45,7 +49,17 @@ export function createAudio(CONFIG) {
       master = ctx.createGain();
       master.gain.value = 0;
       master.connect(ctx.destination);
-      master.gain.linearRampToValueAtTime(A.volume, ctx.currentTime + A.fadeInSeconds);
+      master.gain.linearRampToValueAtTime(
+        muted ? 0 : A.volume, ctx.currentTime + A.fadeInSeconds);
+
+      // Two buses under the master, so the settings panel can weigh the tonal
+      // half against the textural half without touching either synth.
+      musicBus = ctx.createGain();
+      musicBus.gain.value = musicVolume;
+      musicBus.connect(master);
+      ambienceBus = ctx.createGain();
+      ambienceBus.gain.value = ambienceVolume;
+      ambienceBus.connect(master);
 
       /* ── the drone: a few detuned voices under a soft lowpass ── */
       const padGain = ctx.createGain();
@@ -54,7 +68,7 @@ export function createAudio(CONFIG) {
       padFilter.type = 'lowpass';
       padFilter.frequency.value = A.brightness;
       padFilter.Q.value = 0.4;
-      padGain.connect(padFilter).connect(master);
+      padGain.connect(padFilter).connect(musicBus);
 
       for (let i = 0; i < A.droneVoices; i++) {
         const osc = ctx.createOscillator();
@@ -85,7 +99,7 @@ export function createAudio(CONFIG) {
         filter.type = 'lowpass';
         filter.frequency.value = A.brightness * 1.4;
         filter.Q.value = 0.5;
-        gain.connect(filter).connect(master);
+        gain.connect(filter).connect(musicBus);
 
         // Two oscillators a few cents apart. One is a tone; two beating
         // against each other is a pad, and it costs one more oscillator.
@@ -152,7 +166,7 @@ export function createAudio(CONFIG) {
       swellGain.gain.value = 190;
       swell.connect(swellGain).connect(nf.frequency);
 
-      noise.connect(nf).connect(ng).connect(master);
+      noise.connect(nf).connect(ng).connect(ambienceBus);
       noise.start(); swell.start();
     } catch {
       ctx = null;          // audio is a nicety; the scene carries on without it
@@ -207,6 +221,29 @@ export function createAudio(CONFIG) {
     get layers() { return lit; },
 
     toggleMute() { muted = !muted; applyGain(1.2); return muted; },
+
+    /** set mute outright, e.g. restoring a saved preference */
+    setMuted(v) {
+      if (muted === !!v) return;
+      muted = !!v;
+      applyGain(1.2);
+    },
+
+    /** 0..1 — the drone and the awakening layers, together */
+    setMusicVolume(v) {
+      musicVolume = Math.max(0, Math.min(1, v));
+      if (ctx && musicBus) {
+        musicBus.gain.setTargetAtTime(musicVolume, ctx.currentTime, 0.4);
+      }
+    },
+
+    /** 0..1 — the noise wash under everything */
+    setAmbienceVolume(v) {
+      ambienceVolume = Math.max(0, Math.min(1, v));
+      if (ctx && ambienceBus) {
+        ambienceBus.gain.setTargetAtTime(ambienceVolume, ctx.currentTime, 0.4);
+      }
+    },
 
     /** follows the sleep fade so the sound goes down with the light */
     setDim(v) {

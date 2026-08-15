@@ -124,7 +124,12 @@ const VignetteDitherShader = {
     }`,
 };
 
-export function createPost({ CONFIG, quality, renderer, scene, camera, motion = 1 }) {
+/**
+ * `motion` is a live reference — `{ camera }` shared with the main loop — so
+ * flipping reduced motion in the settings stills the symmetry immediately
+ * instead of waiting for the next rebuild.
+ */
+export function createPost({ CONFIG, quality, renderer, scene, camera, motion = { camera: 1 } }) {
   // Drawing-buffer size, not CSS size: every target in the chain lives in
   // device pixels, and sizing the bloom in CSS pixels instead leaves its
   // resolution inconsistent with the texture it samples.
@@ -144,13 +149,16 @@ export function createPost({ CONFIG, quality, renderer, scene, camera, motion = 
   const K = CONFIG.kaleidoscope;
   let kaleidoPass = null;
   let kaleidoAngle = 0;
+  let kaleidoScale = 1;
+  // reduced motion keeps the symmetry but stops it turning, and halves it
+  const kaleidoAmount = () =>
+    K.amount * (motion.camera < 1 ? K.reducedScale : 1) * kaleidoScale;
   if (K.enabled && quality.kaleidoscope) {
     kaleidoPass = new ShaderPass(KaleidoscopeShader);
     kaleidoPass.uniforms.uSegments.value = K.segments;
     kaleidoPass.uniforms.uInner.value = K.inner;
     kaleidoPass.uniforms.uOuter.value = K.outer;
-    // reduced motion keeps the symmetry but stops it turning, and halves it
-    kaleidoPass.uniforms.uAmount.value = K.amount * (motion < 1 ? K.reducedScale : 1);
+    kaleidoPass.uniforms.uAmount.value = kaleidoAmount();
     composer.addPass(kaleidoPass);
   }
 
@@ -197,15 +205,14 @@ export function createPost({ CONFIG, quality, renderer, scene, camera, motion = 
 
     /** 0..1, for fading the symmetry out during a transition */
     setKaleidoscope(scale) {
-      if (!kaleidoPass) return;
-      kaleidoPass.uniforms.uAmount.value =
-        CONFIG.kaleidoscope.amount * (motion < 1 ? CONFIG.kaleidoscope.reducedScale : 1) * scale;
+      kaleidoScale = scale;
     },
 
     render(dt) {
       if (kaleidoPass) {
-        kaleidoAngle += dt * CONFIG.kaleidoscope.speed * motion;
+        kaleidoAngle += dt * CONFIG.kaleidoscope.speed * motion.camera;
         kaleidoPass.uniforms.uAngle.value = kaleidoAngle;
+        kaleidoPass.uniforms.uAmount.value = kaleidoAmount();
       }
       composer.render(dt);
     },

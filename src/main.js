@@ -15,6 +15,9 @@ import { createPost } from './post.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createUI } from './ui.js';
+import {
+  loadSettings, saveSettings, loadJourney, saveJourney, eraseJourney,
+} from './save.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIG — everything worth tweaking lives here.
@@ -328,12 +331,29 @@ const CONFIG = {
 /* ═══════════════════════════════════════════════════════════════════════════
    bootstrap
    ═══════════════════════════════════════════════════════════════════════════ */
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const cameraMotion = reduceMotion ? 0.18 : 1;   // camera bob
-const sceneMotion  = reduceMotion ? 0.6 : 1;    // drift of everything else
+const settings = loadSettings();
+
+/* Reduced motion follows the OS preference until the settings panel says
+   otherwise. The scales live in one shared object rather than two constants so
+   flipping the toggle mid-wander stills the camera and the drift immediately —
+   everything that moves reads these through `ctx` or a live reference. */
+const osReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const motion = { camera: 1, scene: 1 };
+function applyMotionPreference() {
+  const reduced = settings.reducedMotion ?? osReducedMotion;
+  motion.camera = reduced ? 0.18 : 1;   // camera bob
+  motion.scene  = reduced ? 0.6 : 1;    // drift of everything else
+}
+applyMotionPreference();
+
+// a remembered quality choice pins the tier exactly as ?tier= does
+if (settings.quality !== 'auto' && CONFIG.tiers[settings.quality]) {
+  CONFIG.forceTier = settings.quality;
+}
 
 const picked = pickTier(CONFIG);
 let tierName = picked.tier;
+let pinned = picked.pinned;
 let quality = CONFIG.tiers[tierName];
 
 let renderer;
@@ -375,16 +395,30 @@ function start() {
   const terrain  = createTerrain({ CONFIG, quality, scene });
   const rig      = createRig({ CONFIG, camera, terrain });
   let character  = createCharacter({ CONFIG, quality, scene });
-  let post       = createPost({ CONFIG, quality, renderer, scene, camera, motion: cameraMotion });
+  let post       = createPost({ CONFIG, quality, renderer, scene, camera, motion });
 
   const audio = createAudio(CONFIG);
-  const ui = createUI({ CONFIG, audio });
+  audio.setMuted(settings.muted);
+  audio.setMusicVolume(settings.musicVolume);
+  audio.setAmbienceVolume(settings.ambienceVolume);
+
+  const ui = createUI({
+    CONFIG,
+    audio,
+    settings,
+    onMotionChange: applyMotionPreference,
+    onQualityChange: applyQualityChoice,
+    onReset: resetJourney,
+  });
+  ui.onSettingsSave = saveSettings;
+  ui.onBegin = () => ui.showWorldName(world.name, 1400);
 
   const input = createInput({
     CONFIG,
     camera,
     domElement: renderer.domElement,
     onWake: () => ui.wake(),
+    onTap: (x, y) => ui.tapAt(x, y),
   });
 
   /* ── worlds ──────────────────────────────────────────────────────────
@@ -401,6 +435,28 @@ function start() {
   let gate = null;
   let cyclePalette = null;
   let delivered = 0;
+
+  /* The journey: which world this is, what has been woken there, how many
+     motes the monument has taken. Mirrored to localStorage so an accidental
+     refresh — or a phone quietly killing the tab overnight — puts the player
+     back where they drifted off, with everything they woke still alight. */
+  const journey = { world: 0, delivered: 0, awakened: new Set() };
+  const remembered = loadJourney();
+  if (remembered) {
+    journey.world = ((remembered.world % WORLDS.length) + WORLDS.length) % WORLDS.length;
+    journey.delivered = Math.max(0, Math.min(remembered.delivered, CONFIG.motes.monumentTarget));
+    for (const i of remembered.awakened) journey.awakened.add(i);
+  }
+  CONFIG.world.start = journey.world;
+
+  let journeySaveAt = null;
+  function saveJourneySoon() {
+    if (journeySaveAt) return;
+    journeySaveAt = setTimeout(() => {
+      journeySaveAt = null;
+      saveJourney(journey);
+    }, 2500);
+  }
 
   function loadWorld(index) {
     worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
@@ -429,8 +485,23 @@ function start() {
     ui.setFlashColor(p.bloom);
     audio.setWorld(world.audio);
 
-    delivered = 0;
-    content.setMonumentGrowth(0);
+    // Same world as the remembered journey (arriving from a refresh or a
+    // quality rebuild): put back what was woken, already alight. A different
+    // world means we walked on — the journey starts over from here.
+    if (worldIndex === journey.world) {
+      content.restoreAwake(journey.awakened, () => audio.addLayer());
+      delivered = journey.delivered;
+    } else {
+      journey.world = worldIndex;
+      journey.delivered = 0;
+      journey.awakened.clear();
+      delivered = 0;
+      saveJourney(journey);
+      // name the new place as it comes into view — held back so it arrives
+      // with the gate-light still clearing, not on top of it
+      if (ui.began) ui.showWorldName(world.name, 1400);
+    }
+    content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
 
     // water is per-world: most of them have none at all
     if (water) { water.dispose(); water = null; }
@@ -489,10 +560,8 @@ function start() {
   /* ── adaptive quality ──────────────────────────────────────────────── */
   const frameWatch = new FrameWatch();
 
-  function downgrade(force = false) {
-    if (picked.pinned && !force) return;   // the tier was asked for explicitly
-    const next = lowerTier(tierName);
-    if (next === tierName) return;      // already at the bottom
+  function applyTier(next) {
+    if (next === tierName || !CONFIG.tiers[next]) return;
     tierName = next;
     quality = CONFIG.tiers[tierName];
 
@@ -509,7 +578,7 @@ function start() {
     motes = createMotes({ CONFIG, quality, scene });
     fireflies = createFireflies({ CONFIG, quality, scene });
     character = createCharacter({ CONFIG, quality, scene });
-    post = createPost({ CONFIG, quality, renderer, scene, camera, motion: cameraMotion });
+    post = createPost({ CONFIG, quality, renderer, scene, camera, motion });
 
     // ...and this rebuilds the ground, the fractals and the water, and
     // re-tints everything that was just replaced
@@ -518,6 +587,34 @@ function start() {
     rig.place(at.x, at.z, at.yaw);
 
     resize();
+  }
+
+  function downgrade(force = false) {
+    if (pinned && !force) return;       // the tier was asked for explicitly
+    applyTier(lowerTier(tierName));
+  }
+
+  /** the settings panel chose a tier — 'auto' hands control back to the guess */
+  function applyQualityChoice(choice) {
+    if (choice === 'auto') {
+      CONFIG.forceTier = null;
+      pinned = false;
+      applyTier(pickTier(CONFIG).tier);
+    } else if (CONFIG.tiers[choice]) {
+      pinned = true;
+      applyTier(choice);
+    }
+  }
+
+  /** forget the journey and wake up back at the start, through the same
+      soft light a dream-gate uses — resetting should feel like dreaming
+      again, not like a page reload */
+  function resetJourney() {
+    eraseJourney();
+    journey.world = 0;
+    journey.delivered = 0;
+    journey.awakened.clear();
+    if (!ui.transition(() => loadWorld(0))) loadWorld(0);
   }
 
   /* ── slow ambient wind, a lazy noise field made of sines ───────────── */
@@ -531,7 +628,7 @@ function start() {
   /* ── main loop ─────────────────────────────────────────────────────── */
   const ctx = {
     time: 0, dim: 1, mood: 0, mood2: 0,
-    motionScale: sceneMotion,
+    motionScale: motion.scene,
     cameraPosition: camera.position,
     wind,
   };
@@ -574,6 +671,7 @@ function start() {
     ctx.time = time;
     ctx.mood = 0.5 + 0.5 * Math.sin(phase);
     ctx.mood2 = 0.5 + 0.5 * Math.sin(phase * 0.61 + 1.1);
+    ctx.motionScale = motion.scene;   // live, so the settings toggle lands at once
     ctx.dim = ui.update(dt, renderer);
 
     // a few times a second, not every frame: the drift takes seven minutes to
@@ -594,7 +692,7 @@ function start() {
       rig.steer(move.x, move.z, move.strength);
       ui.noteMovement();
     }
-    rig.update(dt, time, cameraMotion);
+    rig.update(dt, time, motion.camera);
     character.update(dt, ctx, rig.state);
 
     /* ── the loop: wake things, gather things, walk through ──────────── */
@@ -603,7 +701,11 @@ function start() {
     // does brings up one more layer of the pad. Suspended during a transition,
     // or arriving somewhere would light whatever happened to be near the spot.
     if (!ui.transitioning) {
-      content.updateAwakening(dt, rig.state.x, rig.state.z, () => audio.addLayer());
+      content.updateAwakening(dt, rig.state.x, rig.state.z, (i) => {
+        audio.addLayer();
+        journey.awakened.add(i);
+        saveJourneySoon();
+      });
     }
 
     // top the motes back up, slowly, so a world never runs out of them
@@ -613,7 +715,12 @@ function start() {
       if (motes.count < Math.min(CONFIG.motes.perWorld, quality.maxMotes)) spawnMote();
     }
 
-    delivered += motes.update(dt, ctx, rig.state, content.monumentPoint);
+    const arrived = motes.update(dt, ctx, rig.state, content.monumentPoint);
+    if (arrived > 0) {
+      delivered += arrived;
+      journey.delivered = delivered;
+      saveJourneySoon();
+    }
     content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
 
     // the gate opens on how much of this world has come awake, and takes you
@@ -644,8 +751,13 @@ function start() {
 
   renderer.setAnimationLoop(frame);
 
-  // let go of the GPU politely if the page is put away
-  window.addEventListener('pagehide', () => renderer.setAnimationLoop(null));
+  // let go of the GPU politely if the page is put away — and write the journey
+  // down first, since a backgrounded tab may never come back
+  window.addEventListener('pagehide', () => {
+    saveJourney(journey);
+    saveSettings(settings);
+    renderer.setAnimationLoop(null);
+  });
   window.addEventListener('pageshow', () => {
     last = performance.now();
     renderer.setAnimationLoop(frame);
@@ -655,7 +767,11 @@ function start() {
   // e.g. __night.CONFIG.movement.maxSpeed = 4 takes effect immediately.
   window.__night = {
     CONFIG,
+    settings,
+    journey,
     get tier() { return tierName; },
+    /** jump to any tier by name, exactly as the settings panel would */
+    setTier(name) { applyQualityChoice(name); return tierName; },
     /** force the next quality step down, as the frame watcher would */
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
     renderer, scene, camera, rig, terrain,
@@ -667,7 +783,11 @@ function start() {
     wakeAll() {
       const was = CONFIG.awaken.radius;
       CONFIG.awaken.radius = 1e6;
-      content.updateAwakening(0, rig.state.x, rig.state.z, () => audio.addLayer());
+      content.updateAwakening(0, rig.state.x, rig.state.z, (i) => {
+        audio.addLayer();
+        journey.awakened.add(i);
+        saveJourneySoon();
+      });
       CONFIG.awaken.radius = was;
       return content.awake;
     },

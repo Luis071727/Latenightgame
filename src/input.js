@@ -13,7 +13,7 @@ import * as THREE from 'three';
  * what that is worth, and its ceilings mean a frantic push is worth no more
  * than a firm one — a hurried gesture must not be able to make this hurried.
  */
-export function createInput({ CONFIG, camera, domElement, onWake }) {
+export function createInput({ CONFIG, camera, domElement, onWake, onTap }) {
   const M = CONFIG.movement;
 
   const keys = new Set();
@@ -100,6 +100,8 @@ export function createInput({ CONFIG, camera, domElement, onWake }) {
         tap.x = dx / mag;
         tap.y = dy / mag;
         tap.life = 1;
+        // let the surface acknowledge the touch — a breath of light, not a marker
+        onTap?.(stick.x, stick.y);
       }
     }
 
