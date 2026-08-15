@@ -1,148 +1,124 @@
 import * as THREE from 'three';
 
 /**
- * Touch handling: tap releases a lantern, holding makes it bigger, dragging
- * lays down a breeze. All three come from the same gesture, so the distinction
- * is made on release — and generously, because nothing here should ever feel
- * like a mis-click.
+ * Steering the wanderer.
+ *
+ * Touch is a floating joystick: the stick appears wherever the finger lands,
+ * and how far it is pushed asks for a direction — not a speed. A quick tap
+ * instead nudges the wanderer toward the spot that was tapped, which decays
+ * on its own, so someone who never works out that they can drag can still get
+ * about by tapping ahead of themselves.
+ *
+ * The output is a world-space direction and a 0..1 strength. The rig decides
+ * what that is worth, and its ceilings mean a frantic push is worth no more
+ * than a firm one — a hurried gesture must not be able to make this hurried.
  */
-export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
-  const raycaster = new THREE.Raycaster();
-  const ndc = new THREE.Vector2();
-  const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+export function createInput({ CONFIG, camera, domElement, onWake }) {
+  const M = CONFIG.movement;
 
-  const pointers = new Map();
+  const keys = new Set();
+
+  // the live stick, if a finger is down
+  let stick = null;      // { id, ox, oy, x, y, dragged, t0 }
+  // a decaying nudge left behind by a tap
+  const tap = { x: 0, y: 0, life: 0 };
+
+  const stickEl = document.getElementById('stick');
+  const knobEl = document.getElementById('knob');
+
+  // camera basis on the ground plane, recomputed each time nav is drained
+  const camForward = new THREE.Vector3();
+  const dir = new THREE.Vector3();
+
+  // kept only so systems written against the old breeze field keep working;
+  // nothing lays down puffs any more
   const breezes = [];
 
-  // Where the two-finger gesture started, and how far it is currently held
-  // from there. Treating the offset as a joystick — rather than integrating
-  // the frame-to-frame delta — means you can press and hold to keep gliding,
-  // instead of having to swipe over and over to cross the lake.
-  const keys = new Set();
-  let navOrigin = null;
-  let navOffset = { x: 0, y: 0 };
-
-  /**
-   * Two or more fingers means "move", not "release a lantern" or "make a
-   * breeze". Marking every live pointer settles it for the whole gesture, so
-   * lifting back down to one finger can't accidentally drop a lantern at the
-   * end of a long drift.
-   */
-  function enterNavMode() {
-    for (const p of pointers.values()) p.nav = true;
-    navOrigin = centroid();
-    navOffset = { x: 0, y: 0 };
+  function showStick(x, y) {
+    if (!stickEl) return;
+    stickEl.style.transform = `translate(${x}px, ${y}px)`;
+    stickEl.classList.add('show');
+    moveKnob(0, 0);
   }
-
-  function centroid() {
-    let x = 0, y = 0, n = 0;
-    for (const p of pointers.values()) { x += p.x; y += p.y; n++; }
-    return n ? { x: x / n, y: y / n } : null;
+  function moveKnob(dx, dy) {
+    if (knobEl) knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
   }
-
-  /** screen point → a spot on the lake, kept within a comfortable range */
-  function screenToWater(px, py, out) {
-    ndc.x = (px / window.innerWidth) * 2 - 1;
-    ndc.y = -(py / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(ndc, camera);
-
-    if (!raycaster.ray.intersectPlane(waterPlane, out)) {
-      // finger is above the horizon — drop it a sensible distance out instead
-      out.copy(raycaster.ray.origin)
-         .addScaledVector(raycaster.ray.direction, CONFIG.spawn.fallbackDistance);
-      out.y = 0;
-    }
-
-    const cx = camera.position.x, cz = camera.position.z;
-    const dx = out.x - cx, dz = out.z - cz;
-    const d = Math.hypot(dx, dz) || 1;
-    const clamped = THREE.MathUtils.clamp(d, CONFIG.spawn.nearest, CONFIG.spawn.farthest);
-    out.set(cx + (dx / d) * clamped, 0, cz + (dz / d) * clamped);
-    return out;
-  }
-
-  function addBreeze(x, z, dx, dz, strength) {
-    if (breezes.length >= CONFIG.breeze.maxPuffs) breezes.shift();
-    breezes.push({ x, z, dx, dz, strength, r: CONFIG.breeze.radius, life: 1 });
+  function hideStick() {
+    if (stickEl) stickEl.classList.remove('show');
   }
 
   function onDown(e) {
     onWake();
-    const p = {
-      x0: e.clientX, y0: e.clientY,
+    if (stick) return;                    // one finger steers; the rest are idle
+    stick = {
+      id: e.pointerId,
+      ox: e.clientX, oy: e.clientY,
       x: e.clientX, y: e.clientY,
-      t0: performance.now(),
       dragged: false,
-      nav: false,
-      world: new THREE.Vector3(),
-      puffX: 0, puffZ: 0,
+      t0: performance.now(),
     };
-    screenToWater(e.clientX, e.clientY, p.world);
-    p.puffX = p.world.x; p.puffZ = p.world.z;
-    pointers.set(e.pointerId, p);
-
-    if (pointers.size >= 2) enterNavMode();
+    showStick(e.clientX, e.clientY);
   }
 
   function onMove(e) {
-    const p = pointers.get(e.pointerId);
-    if (!p) return;
+    if (!stick || e.pointerId !== stick.id) return;
     onWake();
-    p.x = e.clientX; p.y = e.clientY;
+    stick.x = e.clientX;
+    stick.y = e.clientY;
 
-    // two fingers down: steer and glide instead of stirring the water
-    if (pointers.size >= 2) {
-      const c = centroid();
-      if (navOrigin && c) {
-        navOffset = { x: c.x - navOrigin.x, y: c.y - navOrigin.y };
-      }
-      return;
+    let dx = stick.x - stick.ox;
+    let dy = stick.y - stick.oy;
+    const mag = Math.hypot(dx, dy);
+
+    if (mag > CONFIG.input.dragThreshold) stick.dragged = true;
+
+    // A floating origin: once the finger is past the ring, the ring comes with
+    // it. Without this a long drag pins at full tilt and the direction stops
+    // responding, which feels like the controls have jammed.
+    if (mag > M.stickRadius) {
+      const k = (mag - M.stickRadius) / mag;
+      stick.ox += dx * k;
+      stick.oy += dy * k;
+      dx -= dx * k;
+      dy -= dy * k;
+      if (stickEl) stickEl.style.transform = `translate(${stick.ox}px, ${stick.oy}px)`;
     }
 
-    if (!p.dragged && Math.hypot(p.x - p.x0, p.y - p.y0) > CONFIG.input.dragThreshold) {
-      p.dragged = true;
-    }
-
-    screenToWater(p.x, p.y, p.world);
-
-    if (p.dragged && !p.nav) {
-      // Throttle by distance travelled so a long drag lays down a few puffs
-      // rather than one per event, and normalise the direction so a fast
-      // swipe carries no more force than a slow one.
-      const dx = p.world.x - p.puffX;
-      const dz = p.world.z - p.puffZ;
-      const mag = Math.hypot(dx, dz);
-      if (mag > CONFIG.breeze.puffSpacing) {
-        addBreeze(p.world.x, p.world.z, dx / mag, dz / mag,
-                  THREE.MathUtils.clamp(mag / 2.5, 0.15, 1));
-        p.puffX = p.world.x; p.puffZ = p.world.z;
-      }
-    }
+    moveKnob(dx, dy);
   }
 
   function onUp(e) {
-    const p = pointers.get(e.pointerId);
-    if (!p) return;
-    pointers.delete(e.pointerId);
+    if (!stick || e.pointerId !== stick.id) return;
     onWake();
-    if (pointers.size < 2) { navOrigin = null; navOffset = { x: 0, y: 0 }; }
 
-    if (p.nav) return;                // that finger was steering
-    if (p.dragged) return;            // that was a breeze, not a release
+    // a tap, not a drag: walk toward wherever they touched
+    if (!stick.dragged && performance.now() - stick.t0 < CONFIG.input.tapMaxMs) {
+      const cx = window.innerWidth * 0.5;
+      // the wanderer sits a little below the middle of the frame, so measure
+      // from there rather than from the centre of the screen
+      const cy = window.innerHeight * CONFIG.input.tapAnchor;
+      const dx = stick.x - cx;
+      const dy = stick.y - cy;
+      const mag = Math.hypot(dx, dy);
+      if (mag > 1) {
+        tap.x = dx / mag;
+        tap.y = dy / mag;
+        tap.life = 1;
+      }
+    }
 
-    const held = performance.now() - p.t0;
-    const bigness = THREE.MathUtils.clamp(
-      (held - CONFIG.input.holdForBig) /
-      (CONFIG.input.holdMax - CONFIG.input.holdForBig), 0, 1);
-    onRelease(p.world.x, p.world.z, bigness);
+    stick = null;
+    hideStick();
   }
 
-  function onCancel(e) { pointers.delete(e.pointerId); }
+  function onCancel(e) {
+    if (stick && e.pointerId === stick.id) { stick = null; hideStick(); }
+  }
 
   /* ── keyboard, for anyone opening this on a laptop ─────────────────── */
   const NAV_KEYS = new Set([
-    'w','a','s','d','W','A','S','D',
-    'ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
+    'w', 'a', 's', 'd', 'W', 'A', 'S', 'D',
+    'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   ]);
   function onKeyDown(e) {
     if (!NAV_KEYS.has(e.key)) return;
@@ -173,64 +149,68 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
     breezes,
 
     /**
-     * Drain the navigation input gathered since the last frame, folding in
-     * whatever keys are held. Returns impulses, not positions.
+     * Drain the steering gathered since the last frame.
+     * @returns {{x:number, z:number, strength:number}} a world-space direction
      */
-    takeNav(dt) {
-      const M = CONFIG.movement;
-      let turn = 0;
-      let glide = 0;
+    takeNav() {
+      // screen-space request first: +x right, +y down (i.e. toward the viewer)
+      let sx = 0, sy = 0;
 
-      if (navOrigin) {
-        // a small deadzone, so resting two fingers on the glass doesn't drift
-        const ox = Math.abs(navOffset.x) > M.deadzone
-          ? navOffset.x - Math.sign(navOffset.x) * M.deadzone : 0;
-        const oy = Math.abs(navOffset.y) > M.deadzone
-          ? navOffset.y - Math.sign(navOffset.y) * M.deadzone : 0;
-        turn += ox * M.touchTurn * dt;
-        glide -= oy * M.touchGlide * dt;
+      if (stick) {
+        const dx = stick.x - stick.ox;
+        const dy = stick.y - stick.oy;
+        const mag = Math.hypot(dx, dy);
+        if (mag > M.deadzone) {
+          const k = Math.min(1, (mag - M.deadzone) / (M.stickRadius - M.deadzone));
+          sx += (dx / mag) * k;
+          sy += (dy / mag) * k;
+        }
       }
 
-      const kTurn = (keys.has('d') || keys.has('ArrowRight') ? 1 : 0)
-                  - (keys.has('a') || keys.has('ArrowLeft') ? 1 : 0);
-      const kGlide = (keys.has('w') || keys.has('ArrowUp') ? 1 : 0)
-                   - (keys.has('s') || keys.has('ArrowDown') ? 1 : 0);
-
-      turn += kTurn * CONFIG.movement.keyTurn * dt;
-      glide += kGlide * CONFIG.movement.keyGlide * dt;
-      return { turn, glide };
-    },
-
-    /** true while a two-finger gesture or a movement key is active */
-    get navigating() { return pointers.size >= 2 || keys.size > 0; },
-
-    /** how long the longest still-held finger has been down, in ms */
-    heldFor() {
-      let best = 0;
-      for (const p of pointers.values()) {
-        if (p.dragged || p.nav) continue;
-        best = Math.max(best, performance.now() - p.t0);
+      if (tap.life > 0) {
+        sx += tap.x * tap.life;
+        sy += tap.y * tap.life;
       }
-      return best;
+
+      const kx = (keys.has('d') || keys.has('ArrowRight') ? 1 : 0)
+               - (keys.has('a') || keys.has('ArrowLeft') ? 1 : 0);
+      const ky = (keys.has('s') || keys.has('ArrowDown') ? 1 : 0)
+               - (keys.has('w') || keys.has('ArrowUp') ? 1 : 0);
+      sx += kx; sy += ky;
+
+      const strength = Math.min(1, Math.hypot(sx, sy));
+      if (strength < 0.001) return { x: 0, z: 0, strength: 0 };
+
+      // rotate the screen request into the world using the camera's own
+      // heading, so "up" always means "away from the viewer" however far the
+      // follow camera has swung round
+      camera.getWorldDirection(camForward);
+      camForward.y = 0;
+      if (camForward.lengthSq() < 1e-6) camForward.set(0, 0, -1);
+      camForward.normalize();
+
+      // right = forward x up
+      const rx = -camForward.z;
+      const rz = camForward.x;
+
+      dir.set(
+        rx * sx - camForward.x * sy,
+        0,
+        rz * sx - camForward.z * sy
+      );
+      if (dir.lengthSq() < 1e-6) return { x: 0, z: 0, strength: 0 };
+      dir.normalize();
+
+      return { x: dir.x, z: dir.z, strength };
     },
 
-    /** world position under the longest-held finger, or null */
-    heldAt() {
-      let best = null, bestT = 0;
-      for (const p of pointers.values()) {
-        if (p.dragged || p.nav) continue;
-        const t = performance.now() - p.t0;
-        if (t > bestT) { bestT = t; best = p.world; }
-      }
-      return best;
-    },
+    /** true while a finger or a movement key is asking to go somewhere */
+    get navigating() { return !!stick || keys.size > 0 || tap.life > 0; },
 
     update(dt) {
-      for (let i = breezes.length - 1; i >= 0; i--) {
-        const b = breezes[i];
-        b.life -= dt / CONFIG.breeze.decay;
-        b.r += dt * 3.0;              // the puff spreads out as it dies
-        if (b.life <= 0) breezes.splice(i, 1);
+      if (tap.life > 0) {
+        tap.life -= dt / CONFIG.input.tapDecaySeconds;
+        if (tap.life < 0) tap.life = 0;
       }
     },
 
@@ -246,6 +226,7 @@ export function createInput({ CONFIG, camera, domElement, onRelease, onWake }) {
       document.removeEventListener('gesturestart', stop);
       document.removeEventListener('dblclick', stop);
       document.removeEventListener('contextmenu', stop);
+      hideStick();
     },
   };
 }

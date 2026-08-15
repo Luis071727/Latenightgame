@@ -10,7 +10,6 @@ export function createUI({ CONFIG, audio }) {
 
   let touched = false;
   let dim = 1;                  // 1 = awake, 0 = fully asleep
-  let wokeFromSleep = false;
   let lastInteraction = performance.now();
   let lastFadeUpdate = performance.now();
   let wakeLock = null;
@@ -54,7 +53,6 @@ export function createUI({ CONFIG, audio }) {
      * the hint; the rest just keep the sleep timer at bay.
      */
     wake() {
-      if (dim < 0.9) wokeFromSleep = true;
       lastInteraction = performance.now();
 
       if (!touched) {
@@ -65,7 +63,7 @@ export function createUI({ CONFIG, audio }) {
         audio.start();
         requestWakeLock();
 
-        // once they've released a lantern, mention that the lake goes on
+        // if they still haven't gone anywhere, mention that they can
         hint2Timer = setTimeout(() => {
           if (!movedOnce) hint2El.classList.add('show');
           setTimeout(() => hint2El.classList.remove('show'), CONFIG.ui.hint2VisibleMs);
@@ -79,17 +77,6 @@ export function createUI({ CONFIG, audio }) {
       movedOnce = true;
       clearTimeout(hint2Timer);
       hint2El.classList.remove('show');
-    },
-
-    /**
-     * True when the gesture that just ended was the one that woke the scene
-     * from a deep fade — that tap should only bring the light back, not also
-     * release a lantern.
-     */
-    consumeWakeTap() {
-      const was = wokeFromSleep;
-      wokeFromSleep = false;
-      return was;
     },
 
     update(_dt, renderer) {

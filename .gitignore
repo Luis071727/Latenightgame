@@ -4,3 +4,7 @@ dist
 .vercel
 .DS_Store
 *.local
+
+# local render smoke tests (playwright installed ad hoc, not a project dep)
+smoke.mjs
+dbg.mjs

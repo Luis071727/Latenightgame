@@ -94,6 +94,30 @@
   #sound.muted .on { display: none; }
   #sound.muted .off { display: block; }
 
+  /* floating joystick — it appears under the finger and fades out on release */
+  #stick {
+    position: fixed; top: 0; left: 0;
+    width: 0; height: 0;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.5s ease;
+    will-change: transform;
+  }
+  #stick.show { opacity: 0.30; }
+  #stick::before {
+    content: ""; position: absolute;
+    left: -46px; top: -46px; width: 92px; height: 92px;
+    border-radius: 50%;
+    border: 1px solid rgba(226, 214, 255, 0.55);
+  }
+  #knob {
+    position: absolute;
+    left: -17px; top: -17px; width: 34px; height: 34px;
+    border-radius: 50%;
+    background: rgba(226, 214, 255, 0.30);
+    box-shadow: 0 0 18px rgba(198, 178, 255, 0.35);
+    will-change: transform;
+  }
+
   /* sleep fade veil */
   #veil { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; }
 
@@ -108,8 +132,10 @@
 </head>
 <body>
 
-<div id="hint">tap the water</div>
-<div id="hint2">two fingers to drift</div>
+<div id="hint">drag anywhere to wander</div>
+<div id="hint2">or tap ahead of yourself</div>
+
+<div id="stick"><div id="knob"></div></div>
 
 <div id="sound" role="button" tabindex="0" aria-label="Toggle ambient sound">
   <svg viewBox="0 0 24 24" class="on"  aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>

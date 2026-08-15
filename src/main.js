@@ -8,7 +8,7 @@ import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
 import { createTerrain } from './terrain.js';
 import { createRig } from './rig.js';
-import { createHoldGlow } from './holdglow.js';
+import { createCharacter } from './character.js';
 import { createPost } from './post.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
@@ -37,6 +37,14 @@ const CONFIG = {
     sandWet:     0x4a4234,   // darker where the lake has been over it
     tree:        0x05070e,   // conifers against the sky: near-black is right
     treeLit:     0x2f3a2a,   // ...but this is what lantern light lands on
+
+    // the wanderer. Kept a shade lighter than the ground behind them, or the
+    // figure disappears into the horizon whenever they walk toward it.
+    cloakLow:    0x352c52,   // the hem, in shadow
+    cloakHigh:   0x6d629a,   // shoulders and hood, catching the sky
+    cloakRim:    0xa79ad0,   // the edge light that lifts them off the fog
+    cloakGlow:   0xffc98a,   // the light they carry at the chest
+    shadow:      0x05070e,   // the contact shadow under them
   },
 
   render: {
@@ -54,17 +62,40 @@ const CONFIG = {
 
   vignette: { amount: 0.85, radius: 0.80, softness: 0.58, dither: 1.0 },
 
+  /* Third person, trailing the wanderer. The distance is the one number worth
+     playing with: much under 5 and the figure fills the frame in portrait,
+     much over 8 and they stop being the subject of the shot. */
   camera: {
-    // First person, at the waterline: eye height of someone sitting on a low
-    // jetty with their feet near the surface. Anything much above ~2 starts to
-    // read as looking down on the lake from a drone.
-    height: 1.6,
-    lookAtRise: 2.1,         // how much higher than the eye the gaze lands...
-    lookAtDistance: 34,      // ...at this distance, i.e. pitched slightly up
-    fovPortrait: 72,
-    fovLandscape: 62,
-    bob: 0.055,              // vertical breathing; 0 is perfectly still
+    distance: 6.4,           // how far behind
+    height: 2.55,            // ...and how far above their feet
+    lookAhead: 5.5,          // the gaze lands this far in front of them...
+    lookRise: 1.35,          // ...and this high, i.e. just over their shoulder
+    follow: 2.4,             // damping rate; lower = the view lags further
+    lookFollow: 3.0,         // the gaze catches up faster than the body does
+    minClearance: 1.1,       // never let the camera sink into a rise behind us
+    fovPortrait: 68,
+    fovLandscape: 58,
+    bob: 0.05,               // vertical breathing; 0 is perfectly still
     bobSpeed: 0.16,
+  },
+
+  /* The wanderer themself. `scale` is the whole figure; everything else is
+     how the cloth behaves. hemWobble past ~0.15 starts to look like wind
+     rather than fabric. */
+  character: {
+    scale: 1.0,
+    ambient: 0.72,           // how much of the sky the robe catches
+    glow: 1.15,              // brightness of the light at the chest
+    glowSize: 0.30,
+    bob: 0.042,              // vertical float, in units
+    bobSpeed: 1.15,          // ...and its rate, per second
+    lean: 0.20,              // radians of roll at a full-speed turn
+    pitch: 0.07,             // radians of forward tilt at full speed
+    hemWobble: 0.085,        // amplitude of the cloth sway at the hem
+    hemDrag: 0.13,           // how far the hem trails behind the travel
+    swaySpeed: 1.1,
+    shadowRadius: 1.15,
+    shadowOpacity: 0.42,
   },
 
   world: {
@@ -104,29 +135,27 @@ const CONFIG = {
     fadeEndY: 66,
     despawnDistance: 260,    // recycled once this far from the camera
     lightRange: 26,          // how far a lantern's light reaches onto sand
+    // Nothing releases lanterns by hand any more; the lake seeds its own while
+    // the gathering loop is being built. Phase 4 replaces this wholesale.
+    ambientInterval: 5.5,    // seconds between one drifting up on its own
+    ambientRadius: 55,
   },
 
   spawn: { nearest: 7, farthest: 70, fallbackDistance: 26 },
 
-  /* Drifting across the lake. Two fingers to steer and glide; WASD or the
-     arrow keys on a laptop. Everything is capped and heavily damped — this
-     should never feel like driving. */
+  /* Wandering. Drag anywhere for a floating joystick, tap ahead of yourself to
+     drift that way, or WASD / arrow keys on a laptop. Everything is capped and
+     heavily damped — this should never feel like driving. */
   movement: {
-    maxSpeed: 3.2,           // units/sec, roughly a slow row
-    maxTurnSpeed: 0.42,      // radians/sec
-    damping: 0.45,           // per-second velocity decay; you coast to a stop
-    deadzone: 14,            // px of two-finger offset that does nothing
-    touchTurn: 0.010,        // radians/sec² per px held away from the origin
-    touchGlide: 0.10,        // units/sec² per px held away from the origin
-    keyTurn: 1.6,            // radians/sec² while a turn key is held
-    keyGlide: 9.0,           // units/sec² while a glide key is held
-    // ashore you walk instead of gliding: slower, and it stops when you do
-    landMaxSpeed: 1.7,
-    landDamping: 0.02,
-    groundFollow: 7.0,       // how quickly the eye settles onto the ground
-    strideRate: 1.5,         // footfalls per unit walked
-    strideBob: 0.035,        // vertical footfall movement
-    strideSway: 0.022,       // ...and the sideways part of it
+    maxSpeed: 2.5,           // units/sec, an unhurried walking pace
+    accel: 10.0,             // units/sec² while the stick is fully over
+    damping: 0.03,           // per-second velocity decay; you settle, not skid
+    maxTurnSpeed: 1.7,       // radians/sec, hard ceiling
+    turnGain: 3.2,           // how eagerly the heading chases the stick
+    turnResponse: 5.0,       // damping rate of the turn itself
+    deadzone: 12,            // px of stick offset that does nothing
+    stickRadius: 92,         // px from the origin that counts as fully over
+    groundFollow: 7.0,       // how quickly the figure settles onto the ground
   },
 
   /* The archipelago you drift toward — and can land on and walk around. */
@@ -171,10 +200,10 @@ const CONFIG = {
   haze: { radius: 110, height: 7.5, amount: 0.30, centerY: 1.5 },
 
   input: {
-    dragThreshold: 14,       // px before a touch counts as a drag, not a tap
-    holdFeedbackMs: 180,     // when the glow under the finger starts to show
-    holdForBig: 650,         // ms held before a lantern counts as "big"
-    holdMax: 1800,           // ms at which size maxes out
+    dragThreshold: 12,       // px before a touch counts as a drag, not a tap
+    tapMaxMs: 420,           // a touch shorter than this, and still, is a tap
+    tapAnchor: 0.62,         // where down the screen the wanderer sits, 0..1
+    tapDecaySeconds: 1.6,    // how long a tap keeps nudging them along
   },
 
   ui: {
@@ -204,18 +233,21 @@ const CONFIG = {
       maxLanterns: 40, starScale: 1.0, particleScale: 1.0,
       reflections: true, reflectionSize: 512, waterNormalSize: 256,
       terrainCell: 1.5,
+      charSegments: 22, charShadow: true,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
       maxLanterns: 30, starScale: 0.7, particleScale: 0.8,
       reflections: true, reflectionSize: 256, waterNormalSize: 128,
       terrainCell: 2.2,
+      charSegments: 16, charShadow: true,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
       maxLanterns: 20, starScale: 0.45, particleScale: 0.6,
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
       terrainCell: 3.0,
+      charSegments: 11, charShadow: false,
       bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.25,
     },
   },
@@ -260,7 +292,7 @@ function start() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(CONFIG.camera.fovPortrait, 1, 0.1, 900);
-  camera.position.set(0, CONFIG.camera.height, 6);
+  camera.position.set(0, CONFIG.camera.height, 6 + CONFIG.camera.distance);
 
   /* ── scene systems ─────────────────────────────────────────────────── */
   let sky        = createSky({ CONFIG, quality, scene });
@@ -270,7 +302,7 @@ function start() {
   let haze       = createHaze({ CONFIG, scene });
   const terrain  = createTerrain({ CONFIG, quality, scene });
   const rig      = createRig({ CONFIG, camera, terrain });
-  let holdGlow   = createHoldGlow({ CONFIG, scene });
+  let character  = createCharacter({ CONFIG, quality, scene });
   let post       = createPost({ CONFIG, quality, renderer, scene, camera });
 
   const audio = createAudio(CONFIG);
@@ -281,12 +313,6 @@ function start() {
     camera,
     domElement: renderer.domElement,
     onWake: () => ui.wake(),
-    onRelease: (x, z, bigness) => {
-      // the tap that wakes the scene from a deep fade only brings the light
-      // back; it shouldn't also drop a lantern
-      if (ui.consumeWakeTap()) return;
-      lanterns.release(x, z, bigness, terrain.heightAt(x, z));
-    },
   });
 
   /* ── resize ────────────────────────────────────────────────────────── */
@@ -332,11 +358,13 @@ function start() {
     water.dispose();
     lanterns.dispose();
     fireflies.dispose();
+    character.dispose();
     post.dispose();
 
     water = createWater({ CONFIG, quality, scene, renderer });
     lanterns = createLanterns({ CONFIG, quality, scene });
     fireflies = createFireflies({ CONFIG, quality, scene });
+    character = createCharacter({ CONFIG, quality, scene });
     post = createPost({ CONFIG, quality, renderer, scene, camera });
 
     resize();
@@ -361,6 +389,7 @@ function start() {
 
   let last = performance.now();
   let time = 0;
+  let ambientAt = 2;
 
   function frame(now) {
     const rawDt = now - last;
@@ -379,13 +408,27 @@ function start() {
     updateWind(time);
     input.update(dt);
 
-    // steer and glide, then let the rig place the camera (bob included)
-    const move = input.takeNav(dt);
-    if (move.turn || move.glide) {
-      rig.push(move.turn, move.glide);
+    // ask for a direction, then let the rig walk the wanderer and trail the
+    // camera behind them
+    const move = input.takeNav();
+    if (move.strength > 0) {
+      rig.steer(move.x, move.z, move.strength);
       ui.noteMovement();
     }
     rig.update(dt, time, cameraMotion);
+    character.update(dt, ctx, rig.state);
+
+    // the lake seeds its own lanterns for now; the gathering loop replaces
+    // this in a later pass
+    ambientAt -= dt;
+    if (ambientAt <= 0) {
+      ambientAt = CONFIG.lanterns.ambientInterval * (0.6 + Math.random() * 0.8);
+      const a = Math.random() * Math.PI * 2;
+      const r = 12 + Math.random() * CONFIG.lanterns.ambientRadius;
+      const lx = rig.state.x + Math.cos(a) * r;
+      const lz = rig.state.z + Math.sin(a) * r;
+      lanterns.release(lx, lz, Math.random() * 0.5, terrain.heightAt(lx, lz));
+    }
 
     terrain.setLights(lanterns.nearestTo(camera.position, CONFIG.islands.sandLights));
 
@@ -394,7 +437,6 @@ function start() {
     lanterns.update(dt, ctx);
     fireflies.update(dt, ctx);
     haze.update(dt, ctx);
-    holdGlow.update(dt, input.heldAt(), input.heldFor());
 
     post.render(dt);
   }
@@ -417,6 +459,7 @@ function start() {
     /** force the next quality step down, as the frame watcher would */
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
     renderer, scene, camera, rig, terrain,
+    get character() { return character; },
   };
 }
 
