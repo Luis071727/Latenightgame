@@ -12,6 +12,7 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const hint2El = document.getElementById('hint2');
   const worldNameEl = document.getElementById('worldname');
   const stepEl = document.getElementById('step');
+  const memoryEl = document.getElementById('memory');
   const soundEl = document.getElementById('sound');
   const gearEl = document.getElementById('gear');
   const panelEl = document.getElementById('panel');
@@ -31,6 +32,31 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   let hint2Timer = null;
   let movedOnce = false;
   let worldNameTimer = null;
+
+  /* Found things queue rather than interrupt each other: taking the last
+     piece of a set can produce a discovery, a set completion and an unlock in
+     the same instant, and three notices fighting over one line of the screen
+     is exactly the noise this game is trying not to make. */
+  const memoryQueue = [];
+  let memoryTimer = null;
+
+  function nextMemory() {
+    const m = memoryQueue.shift();
+    if (!m) { memoryTimer = null; return; }
+
+    memoryEl.querySelector('.kind').textContent = m.kind;
+    memoryEl.querySelector('.name').textContent = m.name;
+    memoryEl.querySelector('.note').textContent = m.note || '';
+    memoryEl.className = m.rarity || '';
+    // reflow so the class change and the show land as two separate states
+    void memoryEl.offsetWidth;
+    memoryEl.classList.add('show');
+
+    memoryTimer = setTimeout(() => {
+      memoryEl.classList.remove('show');
+      memoryTimer = setTimeout(nextMemory, 1700);
+    }, 4600);
+  }
 
   // the walk-through-a-gate fade: up into soft light, swap, back down
   let flash = 0;
@@ -275,6 +301,19 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
     /** a quiet passing line — "a gate has opened" — in the world-name voice */
     announce(text) {
       this.showWorldName(text, 0);
+    },
+
+    /**
+     * Something was found, or unlocked. Says what it was and goes away.
+     * Nothing pauses, nothing waits to be dismissed, nothing has to be
+     * acknowledged — a reward that interrupts the wandering is not a reward.
+     *
+     * Queued rather than replaced, because completing a set can land three of
+     * these at once and they must not overwrite each other mid-sentence.
+     */
+    showMemory(kind, name, note, rarity = '') {
+      memoryQueue.push({ kind, name, note, rarity });
+      if (!memoryTimer) nextMemory();
     },
 
     /** offer or withdraw the "step through" prompt by an open gate */

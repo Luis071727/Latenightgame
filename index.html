@@ -140,6 +140,41 @@
   #step.show { opacity: 0.85; pointer-events: auto; }
   #step:active { opacity: 1; }
 
+  /* a memory arriving. It does not pause anything, ask for anything, or wait
+     to be dismissed — it says what was found and then it goes away. */
+  #memory {
+    position: fixed; left: 0; right: 0;
+    top: max(16vh, calc(env(safe-area-inset-top) + 84px));
+    text-align: center; padding: 0 28px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 1.6s ease;
+  }
+  #memory.show { opacity: 1; }
+  #memory .kind {
+    font: 300 10px/1.6 var(--sans);
+    letter-spacing: 0.42em; text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  #memory .name {
+    margin-top: 5px;
+    font: 300 clamp(20px, 3.4vw, 26px)/1.35 var(--serif);
+    letter-spacing: 0.10em;
+    color: var(--ink);
+    text-shadow: 0 0 26px var(--glow);
+  }
+  #memory .note {
+    margin-top: 7px;
+    font: 300 12.5px/1.65 var(--sans);
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    max-width: 30ch; margin-left: auto; margin-right: auto;
+    font-style: italic;
+  }
+  /* rarer finds are warmer, and that is the whole of the fanfare */
+  #memory.rare .name  { color: #ffe0b4; text-shadow: 0 0 30px rgba(255,200,140,0.45); }
+  #memory.dream .name { color: #ffd9a0; text-shadow: 0 0 34px rgba(255,190,120,0.55); }
+  #memory.mythic .name{ color: #ffcf90; text-shadow: 0 0 40px rgba(255,180,110,0.65); }
+
   /* corner controls: mute on the right, settings on the left. Deliberately
      easy to ignore — the world is the interface, these are the margins. */
   #sound, #gear {
@@ -425,6 +460,12 @@
 <div id="hint">drag anywhere to wander</div>
 <div id="hint2">walk near things to wake them</div>
 <div id="worldname"></div>
+
+<div id="memory" aria-live="polite">
+  <div class="kind"></div>
+  <div class="name"></div>
+  <div class="note"></div>
+</div>
 
 <div id="stick"><div id="knob"></div></div>
 <div id="tapmark"></div>

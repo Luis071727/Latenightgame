@@ -18,6 +18,8 @@ import { createAudio } from './audio.js';
 import { createUI } from './ui.js';
 import { loadSettings, saveSettings } from './save.js';
 import { createArchive } from './archive.js';
+import { createFragments } from './fragments.js';
+import { RARITY } from './discoveries.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIG — everything worth tweaking lives here.
@@ -280,6 +282,23 @@ const CONFIG = {
     gatherAt: 0.45,          // fraction of a full monument that opens it fully
     clearing: 16,            // no structures grow this close to one
     beacon: 1.0,             // strength of the skyward light once it is opening
+  },
+
+  /* Dream fragments — the named things worth finding. There are eight in a
+     world and they never come back once taken, so every number here is about
+     making one findable rather than about pacing a drip of pickups.
+
+     `takeRadius` is deliberately close: a memory should be something you
+     walked up to, not something you swept up in passing like a mote. */
+  discoveries: {
+    hover: 1.25,             // how far off the ground one floats
+    bob: 0.30,               // ...and how far it drifts up and down
+    rise: 0.55,              // extra lift once it knows you are coming
+    takeRadius: 2.6,         // walk this close and it comes to you
+    takeSeconds: 1.15,       // how long the taking itself lasts
+    glowRadius: 3.4,         // halo size, relative to the body
+    glowPower: 0.40,
+    noticeSeconds: 3.0,      // how long the companion stays interested
   },
 
   /* Debug switches, all off in play. `freeTravel` opens every gate at once so
@@ -547,6 +566,7 @@ function start() {
   let content = null;
   let gate = null;
   let cyclePalette = null;
+  let fragments = null;
   let delivered = 0;
   let gateAnnounced = false;   // "a gate has opened" is said once per visit
 
@@ -567,6 +587,7 @@ function start() {
 
     if (content) content.dispose();
     if (gate) gate.dispose();
+    if (fragments) fragments.dispose();
 
     terrain.build(world);
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
@@ -602,6 +623,15 @@ function start() {
     archive.setCurrentWorld(worldIndex);
     content.restoreAwake(visited.awakened, () => audio.addLayer());
     delivered = visited.delivered;
+
+    // ...and lay out whatever memories this world is still holding. Placed
+    // after the visit is counted, so a discovery that asks for an nth visit
+    // can appear on the visit that satisfies it.
+    fragments = createFragments({
+      CONFIG, quality, scene, world, terrain, archive,
+    });
+    fragments.onNear = (it) => companion?.notice(it.x, it.y, it.z);
+    fragments.onFound = onDiscovery;
     content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
     content.setMasteryForm(archive.monumentForm(world.key));
 
@@ -722,6 +752,26 @@ function start() {
     }
   }
 
+  /**
+   * A memory was taken.
+   *
+   * Recording it is what makes it permanent; everything after that is telling
+   * the player, quietly and without stopping them. `record` returns null if it
+   * was somehow already held, so nothing is ever celebrated twice.
+   */
+  function onDiscovery(d, it) {
+    const rec = archive.record(d.id);
+    if (!rec) return;
+
+    ui.showMemory('new memory', d.name, d.note, d.rarity);
+    character.flare();
+    companion?.notice(it.x, it.y, it.z);
+    // a rarer find brings the world up a layer with it
+    if (RARITY[d.rarity]?.chime >= 2) audio.addLayer();
+    // and the monument answers, since knowing a world is part of mastery
+    content.setMasteryForm(archive.monumentForm(world.key));
+  }
+
   /** walk on to the next world, through the gate's soft light. The same path
       serves the walked-into ring and the tapped "step through" prompt. */
   function enterGate() {
@@ -766,6 +816,7 @@ function start() {
     haze.setPalette(p);
     fireflies.setPalette(p);
     motes.setPalette(p);
+    fragments?.setPalette(p);
     character.setPalette(p);
     gate.setPalette(p);
   }
@@ -884,13 +935,22 @@ function start() {
       : 0;
     character.setGateNear(gateCall);
 
-    if (gateCall > 0.25) {
+    // An unfound memory outranks everything: it is the rarest thing in view
+    // and the eyes finding it a moment before the player does is the gentlest
+    // hint the game can give.
+    const frag = fragments.nearestTo(rig.state.x, rig.state.z, 22);
+    if (frag) {
+      character.lookToward(frag.x, frag.z);
+    } else if (gateCall > 0.25) {
       character.lookToward(gate.position.x, gate.position.z);
     } else {
       const near = motes.nearestFree(rig.state.x, rig.state.z, CONFIG.motes.attractRadius);
       if (near) character.lookToward(near.x, near.z);
       else character.lookToward(null);
     }
+
+    // the memories this world is still holding, and how near we are to one
+    if (!ui.transitioning) fragments.update(dt, ctx, rig.state);
 
     companion?.update(dt, ctx, rig.state, gate);
 
@@ -899,6 +959,7 @@ function start() {
     lights.length = 0;
     for (const m of motes.nearestTo(camera.position, CONFIG.ground.lights)) lights.push(m);
     content.nearestAwake(camera.position, CONFIG.ground.lights, lights);
+    fragments.lights(lights, CONFIG.ground.lights, camera.position);
     lights.sort(byDistance);
     if (lights.length > CONFIG.ground.lights) lights.length = CONFIG.ground.lights;
     terrain.setLights(lights);
@@ -944,6 +1005,14 @@ function start() {
     get companion() { return companion; },
     get gate() { return gate; },
     get motes() { return motes; },
+    get fragments() { return fragments; },
+    /** walk to the nearest unfound memory, for looking at one on purpose */
+    toFragment() {
+      const f = fragments.nearestTo(rig.state.x, rig.state.z, 1e6);
+      if (!f) return null;
+      rig.place(f.x, f.z + 4, 0);
+      return f.d.name;
+    },
     /** wake the whole world at once, for looking at what that does */
     wakeAll() {
       const was = CONFIG.awaken.radius;
