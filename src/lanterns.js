@@ -335,6 +335,14 @@ export function createLanterns({ CONFIG, quality, scene }) {
     glowMesh,
     release,
     update,
+
+    /** re-tint for a world. Lights already in the air keep their old colour,
+     *  which is right: they were lit somewhere else. */
+    setPalette(p) {
+      if (p.mote) { warm.set(p.mote); cool.set(p.mote); }
+      if (p.lanternWarm) warm.set(p.lanternWarm);
+      if (p.lanternCool) cool.set(p.lanternCool);
+    },
     get count() { return active.length; },
     /** live positions, so the reflection system can mirror them */
     get active() { return active; },

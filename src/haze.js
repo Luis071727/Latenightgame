@@ -75,6 +75,7 @@ export function createHaze({ CONFIG, scene }) {
 
   return {
     mesh,
+    setPalette(p) { if (p.haze) uniforms.uColor.value.set(p.haze); },
     update(dt, ctx) {
       uniforms.uTime.value += dt;
       uniforms.uMotion.value = ctx.motionScale;

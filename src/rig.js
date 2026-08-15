@@ -99,6 +99,24 @@ export function createRig({ CONFIG, camera, terrain }) {
         state.vz += forward.z * push;
       }
 
+      /* ── the edge of the world ────────────────────────────────────────
+       * A tide rather than a wall. Past the rim the ground falls away into
+       * weather, and rather than stopping you dead — which would be the one
+       * jarring thing in an otherwise soft experience — the world leans you
+       * gently back toward its middle. Push hard enough and you can stand on
+       * the rim and look out; let go and you drift home.
+       */
+      const bound = terrain ? terrain.radius : 0;
+      if (bound > 0) {
+        const r = Math.hypot(state.x, state.z);
+        const over = (r - bound * M.edgeAt) / (bound * (1 - M.edgeAt));
+        if (over > 0 && r > 0.001) {
+          const pull = Math.min(1, over) * M.edgePull * dt;
+          state.vx -= (state.x / r) * pull;
+          state.vz -= (state.z / r) * pull;
+        }
+      }
+
       const damp = Math.pow(M.damping, dt);
       state.vx *= damp;
       state.vz *= damp;

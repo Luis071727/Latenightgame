@@ -7,6 +7,7 @@ import { createLanterns } from './lanterns.js';
 import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
 import { createTerrain } from './terrain.js';
+import { WORLDS, createWorldContent } from './worlds.js';
 import { createRig } from './rig.js';
 import { createCharacter } from './character.js';
 import { createPost } from './post.js';
@@ -17,26 +18,31 @@ import { createUI } from './ui.js';
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIG — everything worth tweaking lives here.
 
-   Start with `palette`, `lanterns.riseSpeed`, `stars.count` and `tiers`.
+   Per-world colour, fog and fractal settings live in worlds.js; what is here
+   is the fallback palette every world starts from and the machinery that is
+   the same wherever you are. Start with `worlds` in worlds.js, then
+   `fractals.maxDepth`, `movement.maxSpeed` and `tiers`.
+
    Colours are plain sRGB hex; Three.js converts them to linear for you.
    ═══════════════════════════════════════════════════════════════════════════ */
 const CONFIG = {
 
+  /* The fallback palette. Every world in worlds.js overrides most of it; what
+     survives here is what a world chose not to have an opinion about. */
   palette: {
-    skyTopA:     0x121a3a,   // deep indigo overhead
-    skyTopB:     0x1a1636,   // the violet it drifts toward over several minutes
-    skyHorizon:  0x05060d,   // near-black where the sky meets the lake
-    horizonGlow: 0x1a1008,   // a breath of distant town light on the horizon
-    waterDeep:   0x0a1526,   // the lake itself
-    waterFar:    0x070a14,   // used by the low-tier water only
-    lanternWarm: 0xffb257,   // core amber
-    lanternCool: 0xff8f4d,   // the other end of the lantern tint range
-    firefly:     0xffd08a,
-    haze:        0x2a3352,
-    sand:        0x9c907a,   // dry sand, as it would look under a warm light
-    sandWet:     0x4a4234,   // darker where the lake has been over it
-    tree:        0x05070e,   // conifers against the sky: near-black is right
-    treeLit:     0x2f3a2a,   // ...but this is what lantern light lands on
+    skyTopA:     0x2a2c4e,   // overhead
+    skyTopB:     0x373258,   // the colour it drifts toward over several minutes
+    skyHorizon:  0x4a4468,   // low down, where the sky meets the ground
+    horizonGlow: 0x2a1c2e,   // a breath of warmth sitting on the horizon
+    fog:         0x3d3a5c,
+    groundLow:   0x353a56,
+    groundHigh:  0x6f7290,
+    waterDeep:   0x232a44,
+    waterFar:    0x1a1e34,   // used by the low-tier water only
+    lanternWarm: 0xffd2a0,   // core of a mote
+    lanternCool: 0xffb98a,   // the other end of the mote tint range
+    firefly:     0xc4c8f0,
+    haze:        0x4a4670,
 
     // the wanderer. Kept a shade lighter than the ground behind them, or the
     // figure disappears into the horizon whenever they walk toward it.
@@ -44,7 +50,7 @@ const CONFIG = {
     cloakHigh:   0x6d629a,   // shoulders and hood, catching the sky
     cloakRim:    0xa79ad0,   // the edge light that lifts them off the fog
     cloakGlow:   0xffc98a,   // the light they carry at the chest
-    shadow:      0x05070e,   // the contact shadow under them
+    shadow:      0x1e1c30,   // the contact shadow under them
   },
 
   render: {
@@ -103,8 +109,25 @@ const CONFIG = {
     starRadiusNear: 260,
     starRadiusFar: 520,
     waterSize: 1400,
-    fogDensity: 0.009,       // how quickly distance swallows a lantern
-    despawnZ: 260,
+    fogDensity: 0.009,       // fallback; each world sets its own
+    start: 0,                // which entry in worlds.js you arrive in
+  },
+
+  /* The fractal builders. `maxDepth` is the ceiling nothing may exceed however
+     generous a tier is being — a branching structure is 3^depth instances, so
+     this is the number standing between the scene and a phone-melting world. */
+  fractals: {
+    maxDepth: 5,
+    blockRound: 0.34,        // 0 = a box, 1 = a sphere, for monument blocks
+    monumentSpin: 0.012,     // radians/sec — slow enough to only notice at rest
+  },
+
+  /* The ground shader. `lights` is a shader constant: changing it recompiles. */
+  ground: {
+    lights: 6,               // nearest motes that light the ground
+    lightPower: 3.2,
+    grain: 0.028,            // per-pixel surface grain, as a normal slope
+    detailFade: 0.045,       // how quickly the grain fades with distance
   },
 
   water: {
@@ -134,14 +157,12 @@ const CONFIG = {
     fadeStartY: 30,
     fadeEndY: 66,
     despawnDistance: 260,    // recycled once this far from the camera
-    lightRange: 26,          // how far a lantern's light reaches onto sand
-    // Nothing releases lanterns by hand any more; the lake seeds its own while
-    // the gathering loop is being built. Phase 4 replaces this wholesale.
+    lightRange: 26,          // how far a lantern's light reaches onto the ground
+    // Nothing releases lanterns by hand any more; each world seeds its own
+    // while the gathering loop is being built. Phase 4 replaces this wholesale.
     ambientInterval: 5.5,    // seconds between one drifting up on its own
     ambientRadius: 55,
   },
-
-  spawn: { nearest: 7, farthest: 70, fallbackDistance: 26 },
 
   /* Wandering. Drag anywhere for a floating joystick, tap ahead of yourself to
      drift that way, or WASD / arrow keys on a laptop. Everything is capped and
@@ -156,32 +177,8 @@ const CONFIG = {
     deadzone: 12,            // px of stick offset that does nothing
     stickRadius: 92,         // px from the origin that counts as fully over
     groundFollow: 7.0,       // how quickly the figure settles onto the ground
-  },
-
-  /* The archipelago you drift toward — and can land on and walk around. */
-  islands: {
-    seed: 7,
-    count: 13,
-    minDistance: 55, maxDistance: 430,
-    minRadius: 15, maxRadius: 30,
-    minHeight: 2.2, maxHeight: 7.5,
-    cellSize: 1.0,           // metres per terrain quad; smaller = finer dunes
-    underwaterDrop: 2.4,     // how far the ground sinks past the shoreline
-    shoreAt: 0.92,           // fraction of the radius where the sand meets water
-    beachFalloff: 1.7,       // >1 gives a long shallow toe you can stand on
-    shoreScale: 0.05,        // noise frequency that makes the coastline wander
-    shoreWobble: 0.11,       // ...and how far it wanders, as a fraction of radius
-    duneScale: 0.085,        // dune noise frequency
-    duneAmount: 0.42,        // ...and how much of the island height it moves
-    grain: 0.030,            // per-pixel sand grain, as a normal slope
-    ripple: 0.11,            // depth of the ripples the water leaves behind
-    detailFade: 0.05,        // how quickly grain fades with distance
-    ambient: 0.55,           // how much of the night sky the sand catches
-    sandLights: 6,           // nearest lanterns that light the beach
-    lightPower: 3.2,         // brightness of a lantern falling on sand
-    treeMinHeight: 1.4,      // no conifers down on the wet sand
-    maxTrees: 7, treeHeight: 5.5,
-    fogDensity: 0.0035,      // how far away they melt into the horizon
+    edgeAt: 0.88,            // fraction of the world radius where it leans back
+    edgePull: 9.0,           // units/sec² of that lean, at the very edge
   },
 
   breeze: {
@@ -190,7 +187,6 @@ const CONFIG = {
     decay: 1.8,              // seconds for a puff to die out
     maxDrift: 0.55,          // ceiling on sideways speed, units/sec
     maxPuffs: 8,
-    puffSpacing: 0.6,        // world units of finger travel between puffs
   },
 
   wind: { strength: 0.10 },
@@ -208,7 +204,7 @@ const CONFIG = {
 
   ui: {
     hintDelayMs: 2600,
-    hint2DelayMs: 9000,      // when the "two fingers to drift" nudge appears
+    hint2DelayMs: 9000,      // when the "or tap ahead of yourself" nudge appears
     hint2VisibleMs: 9000,
     sleepAfterSeconds: 600,  // ~10 minutes of stillness, then it dims itself
     sleepFadeSeconds: 50,
@@ -232,21 +228,27 @@ const CONFIG = {
     high: {
       maxLanterns: 40, starScale: 1.0, particleScale: 1.0,
       reflections: true, reflectionSize: 512, waterNormalSize: 256,
-      terrainCell: 1.5,
+      groundCells: 128,
+      fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
+      mengerDepth: 2, blockSegments: 3, cloudLayers: 3,
       charSegments: 22, charShadow: true,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
       maxLanterns: 30, starScale: 0.7, particleScale: 0.8,
       reflections: true, reflectionSize: 256, waterNormalSize: 128,
-      terrainCell: 2.2,
+      groundCells: 96,
+      fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
+      mengerDepth: 2, blockSegments: 2, cloudLayers: 2,
       charSegments: 16, charShadow: true,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
       maxLanterns: 20, starScale: 0.45, particleScale: 0.6,
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
-      terrainCell: 3.0,
+      groundCells: 64,
+      fractalDepth: 3, fractalInstances: 1600, structureScale: 0.6,
+      mengerDepth: 1, blockSegments: 1, cloudLayers: 1,
       charSegments: 11, charShadow: false,
       bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.25,
     },
@@ -296,7 +298,7 @@ function start() {
 
   /* ── scene systems ─────────────────────────────────────────────────── */
   let sky        = createSky({ CONFIG, quality, scene });
-  let water      = createWater({ CONFIG, quality, scene, renderer });
+  let water      = null;               // only the worlds that have any
   let lanterns   = createLanterns({ CONFIG, quality, scene });
   let fireflies  = createFireflies({ CONFIG, quality, scene });
   let haze       = createHaze({ CONFIG, scene });
@@ -314,6 +316,46 @@ function start() {
     domElement: renderer.domElement,
     onWake: () => ui.wake(),
   });
+
+  /* ── worlds ──────────────────────────────────────────────────────────
+   *
+   * Loading a world is: throw away the last one's geometry, rebuild the
+   * ground, grow the new one's contents, and re-tint everything shared. The
+   * shared systems are re-tinted rather than rebuilt — a ShaderMaterial is a
+   * shader compile, and compiling one mid-transition is exactly where a
+   * stutter would show.
+   */
+  let worldIndex = -1;
+  let world = null;
+  let content = null;
+
+  function loadWorld(index) {
+    worldIndex = ((index % WORLDS.length) + WORLDS.length) % WORLDS.length;
+    world = WORLDS[worldIndex];
+    const p = world.palette;
+
+    if (content) content.dispose();
+
+    terrain.build(world);
+    content = createWorldContent({ CONFIG, quality, scene, world, terrain });
+
+    sky.setPalette(p);
+    sky.setStars(world.stars);
+    haze.setPalette(p);
+    fireflies.setPalette(p);
+    fireflies.setDensity(world.fireflies);
+    lanterns.setPalette(p);
+    character.setPalette(p);
+    character.setFogDensity(world.fog.density);
+    renderer.setClearColor(p.fog, 1);
+
+    // water is per-world: most of them have none at all
+    if (water) { water.dispose(); water = null; }
+    if (world.water) water = createWater({ CONFIG, quality, scene, renderer, world });
+
+    // arrive out on the plaza, facing the monument in the middle
+    rig.place(0, world.ground.plazaRadius * 2.4, 0);
+  }
 
   /* ── resize ────────────────────────────────────────────────────────── */
   let pixelRatio = 1;
@@ -342,6 +384,8 @@ function start() {
   window.addEventListener('orientationchange', () => setTimeout(resize, 120));
   resize();
 
+  loadWorld(CONFIG.world.start);
+
   /* ── adaptive quality ──────────────────────────────────────────────── */
   const frameWatch = new FrameWatch();
 
@@ -352,20 +396,26 @@ function start() {
     tierName = next;
     quality = CONFIG.tiers[tierName];
 
-    // Rebuild only what the tier actually changes. Lantern state is lost, but
-    // the ones in the air simply finish their flight and the player releases
-    // more — far less jarring than a stutter that never goes away.
-    water.dispose();
+    // Everything the tier actually changes goes: the fractals thin out, the
+    // ground coarsens, the motes in flight are lost. The world is rebuilt
+    // rather than patched because its instance counts are baked at build time
+    // — and a world rebuilt in place is a fraction of a second where a
+    // permanent stutter would otherwise be.
     lanterns.dispose();
     fireflies.dispose();
     character.dispose();
     post.dispose();
 
-    water = createWater({ CONFIG, quality, scene, renderer });
     lanterns = createLanterns({ CONFIG, quality, scene });
     fireflies = createFireflies({ CONFIG, quality, scene });
     character = createCharacter({ CONFIG, quality, scene });
     post = createPost({ CONFIG, quality, renderer, scene, camera });
+
+    // ...and this rebuilds the ground, the fractals and the water, and
+    // re-tints everything that was just replaced
+    const at = { x: rig.state.x, z: rig.state.z, yaw: rig.state.yaw };
+    loadWorld(worldIndex);
+    rig.place(at.x, at.z, at.yaw);
 
     resize();
   }
@@ -418,8 +468,8 @@ function start() {
     rig.update(dt, time, cameraMotion);
     character.update(dt, ctx, rig.state);
 
-    // the lake seeds its own lanterns for now; the gathering loop replaces
-    // this in a later pass
+    // each world seeds its own drifting lights for now; the gathering loop
+    // replaces this in a later pass
     ambientAt -= dt;
     if (ambientAt <= 0) {
       ambientAt = CONFIG.lanterns.ambientInterval * (0.6 + Math.random() * 0.8);
@@ -430,13 +480,14 @@ function start() {
       lanterns.release(lx, lz, Math.random() * 0.5, terrain.heightAt(lx, lz));
     }
 
-    terrain.setLights(lanterns.nearestTo(camera.position, CONFIG.islands.sandLights));
+    terrain.setLights(lanterns.nearestTo(camera.position, CONFIG.ground.lights));
 
     sky.update(dt, ctx);
-    water.update(dt, ctx);
+    if (water) water.update(dt, ctx);
     lanterns.update(dt, ctx);
     fireflies.update(dt, ctx);
     haze.update(dt, ctx);
+    content.update(dt, ctx);
 
     post.render(dt);
   }
@@ -460,6 +511,17 @@ function start() {
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
     renderer, scene, camera, rig, terrain,
     get character() { return character; },
+    get world() { return world.key; },
+    get instances() { return content.instances; },
+    get structures() { return content.structures; },
+    /** step to a world by index or by key, for looking at one on purpose */
+    go(which) {
+      const i = typeof which === 'number'
+        ? which
+        : WORLDS.findIndex((w) => w.key === which);
+      if (i >= 0) loadWorld(i);
+      return world.key;
+    },
   };
 }
 

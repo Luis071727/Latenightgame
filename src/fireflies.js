@@ -43,6 +43,9 @@ export function createFireflies({ CONFIG, quality, scene }) {
     uMotion: { value: 1 },
   };
 
+  // how thick this world's drift is, set on arrival rather than per frame
+  let density = 1;
+
   const mat = new THREE.ShaderMaterial({
     uniforms,
     transparent: true,
@@ -98,9 +101,22 @@ export function createFireflies({ CONFIG, quality, scene }) {
   return {
     points,
     setViewportHeight(h) { uniforms.uScale.value = Math.min(2.2, h / 620 + 0.4); },
+
+    setPalette(p) { if (p.firefly) uniforms.uColor.value.set(p.firefly); },
+
+    /** a world's share of the drift: 0 hides them, 1 is the configured count */
+    setDensity(v) {
+      density = v;
+      points.visible = v > 0.01;
+      // Thinning by count rather than by brightness. Dimming them all would
+      // read as haze; dropping some of them reads as a sparser world.
+      geo.setDrawRange(0, Math.max(1, Math.round(count * Math.min(1, v))));
+    },
+
     update(dt, ctx) {
       uniforms.uTime.value += dt;
       uniforms.uMotion.value = ctx.motionScale;
+      uniforms.uAmount.value = CONFIG.fireflies.brightness * Math.min(1.4, density);
 
       // Wrap any firefly the camera has drifted away from around to the far
       // side, so a few are always nearby without them rigidly following you.

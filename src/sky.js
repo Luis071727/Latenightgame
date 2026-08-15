@@ -132,8 +132,22 @@ export function createSky({ CONFIG, quality, scene }) {
   const topA = new THREE.Color(CONFIG.palette.skyTopA);
   const topB = new THREE.Color(CONFIG.palette.skyTopB);
 
+  // how much of the starfield this world admits: the meadow keeps a few, the
+  // star garden is nothing but
+  let starAmount = 1;
+
   return {
     group,
+
+    /** re-tint for a world. Only the keys present are changed. */
+    setPalette(p) {
+      if (p.skyTopA) topA.set(p.skyTopA);
+      if (p.skyTopB) topB.set(p.skyTopB);
+      if (p.skyHorizon) domeUniforms.uHorizon.value.set(p.skyHorizon);
+      if (p.horizonGlow) domeUniforms.uWarm.value.set(p.horizonGlow);
+    },
+
+    setStars(amount) { starAmount = amount; },
 
     /** star point size is in device pixels, so it has to track viewport height */
     setViewportHeight(h) {
@@ -158,7 +172,7 @@ export function createSky({ CONFIG, quality, scene }) {
       starUniforms.uTime.value = ctx.time;
       starUniforms.uDensity.value = 0.62 + 0.30 * ctx.mood2;
       starUniforms.uOpacity.value =
-        CONFIG.stars.brightness * (0.85 + 0.15 * ctx.mood) * ctx.dim;
+        CONFIG.stars.brightness * starAmount * (0.85 + 0.15 * ctx.mood) * ctx.dim;
 
       domeUniforms.uTop.value.copy(topA).lerp(topB, ctx.mood);
     },
