@@ -116,6 +116,30 @@
   }
   #worldname.show { opacity: 0.78; }
 
+  /* offered when standing before an open gate, so travel never depends on
+     hitting an exact radius while moving */
+  #step {
+    position: fixed; left: 50%;
+    bottom: max(12vh, calc(env(safe-area-inset-bottom) + 76px));
+    translate: -50% 0;
+    padding: 14px 32px; min-height: 48px; box-sizing: border-box;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(226, 214, 255, 0.07);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    font: 300 13px/1.4 var(--sans);
+    letter-spacing: 0.28em; text-transform: lowercase; text-indent: 0.28em;
+    color: var(--ink);
+    text-shadow: 0 0 14px var(--glow);
+    opacity: 0; pointer-events: none;
+    transition: opacity 1.4s ease;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #step.show { opacity: 0.85; pointer-events: auto; }
+  #step:active { opacity: 1; }
+
   /* corner controls: mute on the right, settings on the left. Deliberately
      easy to ignore — the world is the interface, these are the margins. */
   #sound, #gear {
@@ -276,6 +300,13 @@
     color: var(--ink-soft);
     flex: none;
   }
+  /* a row whose control needs the whole width — the quality picker at its
+     widest is five words, which will not sit beside a label on a phone */
+  .row.stack {
+    display: block;
+    padding: 6px 0 2px;
+  }
+  .row.stack label { display: block; margin-bottom: 8px; }
 
   /* toggles: a quiet pill, no browser chrome */
   .toggle {
@@ -330,20 +361,21 @@
     box-shadow: 0 0 12px var(--glow);
   }
 
-  /* the quality picker: four small words, one of them lit */
-  #set-quality { display: flex; gap: 4px; }
-  #set-quality button {
+  /* segmented pickers — a few small words, one of them lit */
+  .seg { display: flex; gap: 4px; justify-content: space-between; }
+  .seg button {
     appearance: none; -webkit-appearance: none;
+    flex: 1;
     background: none; border: 1px solid transparent;
     border-radius: 999px;
-    padding: 7px 10px;
+    padding: 9px 6px;
     font: 300 11px/1 var(--sans);
     letter-spacing: 0.14em; text-transform: lowercase;
     color: var(--ink-faint);
     cursor: pointer;
     transition: color 0.25s ease, border-color 0.25s ease;
   }
-  #set-quality button.on {
+  .seg button.on {
     color: var(--accent);
     border-color: rgba(255, 214, 168, 0.35);
   }
@@ -396,6 +428,7 @@
 
 <div id="stick"><div id="knob"></div></div>
 <div id="tapmark"></div>
+<div id="step" role="button" tabindex="0">step through</div>
 
 <div id="sound" role="button" tabindex="0" aria-label="Toggle ambient sound">
   <svg viewBox="0 0 24 24" class="on"  aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
@@ -428,10 +461,19 @@
       <label for="set-motion">reduced motion</label>
       <button id="set-motion" class="toggle" aria-pressed="false" aria-label="Reduced motion"></button>
     </div>
-    <div class="row">
+    <div class="row stack">
+      <label>pace</label>
+      <div id="set-pace" class="seg" role="radiogroup" aria-label="Walking pace">
+        <button data-p="stroll">stroll</button>
+        <button data-p="wander" class="on">wander</button>
+        <button data-p="drift">drift</button>
+      </div>
+    </div>
+    <div class="row stack">
       <label>quality</label>
-      <div id="set-quality" role="radiogroup" aria-label="Graphics quality">
+      <div id="set-quality" class="seg" role="radiogroup" aria-label="Graphics quality">
         <button data-q="auto" class="on">auto</button>
+        <button data-q="saver">saver</button>
         <button data-q="low">low</button>
         <button data-q="medium">med</button>
         <button data-q="high">high</button>

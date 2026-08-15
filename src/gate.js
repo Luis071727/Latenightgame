@@ -41,6 +41,7 @@ export function createGate({ CONFIG, scene, world, terrain }) {
     uTime:    { value: 0 },
     uMotion:  { value: 1 },
     uOpen:    { value: 0 },
+    uBeacon:  { value: G.beacon },
     uRing:    { value: new THREE.Color(world.palette.bloom) },
     uVeil:    { value: new THREE.Color(world.palette.mote) },
   };
@@ -118,6 +119,49 @@ export function createGate({ CONFIG, scene, world, terrain }) {
   veil.position.y = G.radius + G.lift;
   group.add(veil);
 
+  /* ── the beacon: a soft pillar of light standing over the gate ──────────
+   *
+   * This is the wayfinding. The ring is invisible from across a foggy world;
+   * a column of light on the horizon is not. Two crossed planes so it reads
+   * from every angle, additive and very faint — a place the sky is warmer,
+   * not a searchlight. It scales with how open the gate is, so the world
+   * brightening in one direction *is* the progress readout.
+   */
+  const beaconGeo = new THREE.PlaneGeometry(G.radius * 2.4, 34, 1, 8);
+  beaconGeo.translate(0, 17, 0);      // stand on the ground, reach upward
+  const beaconMat = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      uniform float uTime, uMotion, uOpen, uBeacon;
+      uniform vec3 uVeil;
+      varying vec2 vUv;
+      void main() {
+        // bright at the ring, gone by the top; soft at both side edges
+        float rise = pow(1.0 - vUv.y, 1.8);
+        float acrs = pow(sin(vUv.x * 3.14159), 1.6);
+        // a slow breath so it reads as something alive rather than a cone of fog
+        float breathe = 0.85 + 0.15 * sin(uTime * uMotion * 0.5 + vUv.y * 4.0);
+        gl_FragColor = vec4(uVeil, rise * acrs * breathe * uOpen * uBeacon * 0.30);
+      }`,
+  });
+  const beaconA = new THREE.Mesh(beaconGeo, beaconMat);
+  const beaconB = new THREE.Mesh(beaconGeo, beaconMat);
+  beaconB.rotation.y = Math.PI / 2;
+  beaconA.renderOrder = 1;
+  beaconB.renderOrder = 1;
+  group.add(beaconA);
+  group.add(beaconB);
+
   let open = 0;
 
   return {
@@ -149,12 +193,23 @@ export function createGate({ CONFIG, scene, world, terrain }) {
       return dx * dx + dz * dz < G.enterRadius * G.enterRadius;
     },
 
+    /** true when the gate would admit someone who stepped through right now */
+    get enterable() { return open >= CONFIG.gate.enterAt; },
+
+    /** squared ground distance from a point to the gate, allocation-free */
+    distance2(px, pz) {
+      const dx = px - x, dz = pz - z;
+      return dx * dx + dz * dz;
+    },
+
     dispose() {
       scene.remove(group);
       ringGeo.dispose();
       ring.material.dispose();
       veilGeo.dispose();
       veil.material.dispose();
+      beaconGeo.dispose();
+      beaconMat.dispose();
     },
   };
 }

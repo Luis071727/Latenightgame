@@ -199,6 +199,70 @@ export function createCharacter({ CONFIG, quality, scene }) {
   glow.renderOrder = 3;
   group.add(glow);
 
+  /* ── the face in the hood ─────────────────────────────────────────────
+   *
+   * Two soft lights on one quad, drawn in the fragment shader — one mesh, one
+   * draw call, no geometry per eye. The quad sits just proud of the cowl
+   * surface and faces forward in object space, so it turns with the figure and
+   * the head occludes it honestly whenever you are behind them.
+   *
+   * They blink, and they glance at whatever the world has just offered. What
+   * they deliberately do not do is emote: the moment these can look pleased or
+   * worried the figure stops being a dream you are moving through and starts
+   * being someone with opinions about it.
+   */
+  const EYE_W = 0.26, EYE_H = 0.13;
+  const eyeGeo = new THREE.PlaneGeometry(EYE_W, EYE_H);
+  const eyeUniforms = {
+    uColor:  { value: new THREE.Color(CONFIG.palette.cloakGlow) },
+    uGlow:   { value: C.eyeGlow },
+    uBlink:  { value: 1 },        // 1 open, 0 shut
+    uGlance: { value: 0 },        // horizontal, in units
+    uFogDensity: { value: CONFIG.world.fogDensity },
+  };
+  const eyeMat = new THREE.ShaderMaterial({
+    uniforms: eyeUniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`
+      varying vec2 vP;
+      varying float vDepth;
+      void main() {
+        vP = position.xy;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vDepth = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uColor;
+      uniform float uGlow, uBlink, uGlance, uFogDensity;
+      varying vec2 vP;
+      varying float vDepth;
+
+      float eye(vec2 p, vec2 at, float blink) {
+        vec2 d = p - at;
+        // dividing the vertical distance by how open the lid is turns the dot
+        // into a line and then into nothing, which is what a blink looks like
+        d.y /= max(blink, 0.05);
+        float r = length(d) / ${C.eyeSize.toFixed(4)};
+        return pow(max(0.0, 1.0 - r), 2.0) * 0.6 + pow(max(0.0, 1.0 - r), 8.0);
+      }
+
+      void main() {
+        float s = ${C.eyeSpacing.toFixed(4)};
+        float v = eye(vP, vec2(-s + uGlance, 0.0), uBlink)
+                + eye(vP, vec2( s + uGlance, 0.0), uBlink);
+        float fog = 1.0 - exp(-pow(vDepth * uFogDensity, 2.0));
+        gl_FragColor = vec4(uColor * v * uGlow * (1.0 - fog), 1.0);
+      }`,
+  });
+  const eyes = new THREE.Mesh(eyeGeo, eyeMat);
+  eyes.position.set(0, HEIGHT * C.scale * C.eyeHeight, -C.eyeDepth * C.scale);
+  eyes.rotation.y = Math.PI;      // face -Z, the direction yaw 0 looks
+  eyes.renderOrder = 4;
+  group.add(eyes);
+
   /* ── contact shadow ───────────────────────────────────────────────────
    *
    * A blob, not a shadow map. The whole scene is lit by a sky dome, so there
@@ -237,16 +301,40 @@ export function createCharacter({ CONFIG, quality, scene }) {
   }
 
   const localMove = new THREE.Vector2();
+  const glowWorld = new THREE.Vector3();   // reused; glowPosition allocates nothing
   let lean = 0;
   let pitch = 0;
   let bobPhase = 0;
+
+  /* ── the small internal life ───────────────────────────────────────────
+   * Everything below is a timer and an eased value. There is no state machine
+   * because there are no states worth naming: the figure is always breathing,
+   * usually still, and occasionally does one of two small things.
+   */
+  let blinkAt = 1 + Math.random() * C.blinkEvery;
+  let blinkT = -1;              // < 0 when not blinking; runs 0..1 through one
+  let blinksLeft = 0;           // a second one queued, for a double blink
+  let glance = 0;               // where the eyes are, in units across the quad
+  let glanceWant = 0;
+  let shiftAt = C.shiftEvery;
+  let shift = 0, shiftWant = 0;
+  let lookAt = C.lookAboutEvery;
+  let look = 0, lookWant = 0;
+  let breathPhase = Math.random() * 6.28;
+  let idleFor = 0;
+  let glowBoost = 0;            // decaying flare from gathering a mote
+  let gateNear = 0;             // 0..1, how strongly an open gate is calling
+
+  /** a random interval around a mean, never less than a third of it */
+  const soon = (mean) => mean * (0.4 + Math.random() * 1.2);
 
   return {
     group,
     robe,
 
-    /** world position of the light at the chest, for anything that wants it */
-    get glowPosition() { return glow.getWorldPosition(new THREE.Vector3()); },
+    /** world position of the light at the chest, for anything that wants it.
+        Returns a shared scratch vector — copy it if you need to keep it. */
+    get glowPosition() { return glow.getWorldPosition(glowWorld); },
 
     /**
      * Re-tint for a new world. Called on a world swap rather than per frame —
@@ -266,11 +354,48 @@ export function createCharacter({ CONFIG, quality, scene }) {
         robeUniforms.uFogColor.value.set(p.skyHorizon);
       }
       if (p.shadow && shadow) shadow.material.uniforms.uColor.value.set(p.shadow);
+      if (p.mote) eyeUniforms.uColor.value.set(p.mote);
     },
 
     setFogDensity(d) {
       robeUniforms.uFogDensity.value = d;
       glowUniforms.uFogDensity.value = d;
+      eyeUniforms.uFogDensity.value = d;
+    },
+
+    /**
+     * Something was just gathered. The light at the chest takes it in and
+     * gives it back over the next second or so.
+     */
+    flare() {
+      glowBoost = Math.min(glowBoost + C.glowGather, C.glowGather * 1.6);
+    },
+
+    /**
+     * How strongly an open gate is calling, 0..1. The chest light breathes
+     * with it, which is the quietest half of the wayfinding.
+     */
+    setGateNear(v) {
+      gateNear = THREE.MathUtils.clamp(v, 0, 1);
+    },
+
+    /**
+     * Look at something, in world space — the nearest mote, an open gate.
+     * Pass nothing to let the gaze drift back to centre. Only the horizontal
+     * component is used: these are two dots, not a head.
+     */
+    lookToward(x, z) {
+      if (x === undefined || x === null) { glanceWant = 0; return; }
+      const dx = x - group.position.x;
+      const dz = z - group.position.z;
+      // the angle between where they face and the thing, wrapped to ±π
+      const want = Math.atan2(dx, -dz);
+      const diff = Math.atan2(Math.sin(want - group.rotation.y),
+                              Math.cos(want - group.rotation.y));
+      // Clamped hard, and the sign flips because the eye quad is turned to
+      // face -Z: its local +X runs to the wanderer's left.
+      const k = THREE.MathUtils.clamp(diff / (Math.PI * 0.5), -1, 1);
+      glanceWant = -k * C.glanceMax * C.eyeSpacing;
     },
 
     /**
@@ -278,7 +403,8 @@ export function createCharacter({ CONFIG, quality, scene }) {
      *             is currently moving and turning
      */
     update(dt, ctx, rig) {
-      const speed01 = THREE.MathUtils.clamp(rig.speed / CONFIG.movement.maxSpeed, 0, 1);
+      const topSpeed = CONFIG.movement.maxSpeed * (CONFIG.movement.paceScale ?? 1);
+      const speed01 = THREE.MathUtils.clamp(rig.speed / topSpeed, 0, 1);
 
       group.position.set(rig.x, rig.y, rig.z);
       group.rotation.y = rig.yaw;
@@ -290,8 +416,71 @@ export function createCharacter({ CONFIG, quality, scene }) {
       const wantPitch = speed01 * C.pitch;
       lean = THREE.MathUtils.damp(lean, wantLean, 3.2, dt);
       pitch = THREE.MathUtils.damp(pitch, wantPitch, 3.0, dt);
-      group.rotation.z = lean * ctx.motionScale;
+
+      /* ── the idle life ──────────────────────────────────────────────
+       * A figure that has stopped must not look paused. Three things run:
+       * breathing, always; a weight-shift and a look-around, occasionally,
+       * and only once they have actually been standing still a moment.
+       */
+      const m = ctx.motionScale;
+      idleFor = speed01 < 0.06 ? idleFor + dt : 0;
+      const settled = THREE.MathUtils.clamp(idleFor - 0.7, 0, 1);
+
+      breathPhase += dt * C.breathSpeed * m;
+      // fuller breaths at rest than under way — walking is not resting
+      const breath = Math.sin(breathPhase) * C.breathDepth * (0.5 + 0.5 * settled) * m;
+      robe.scale.set(1 + breath * 0.6, 1 - breath * 0.35, 1 + breath * 0.6);
+
+      shiftAt -= dt;
+      if (shiftAt <= 0) {
+        shiftAt = soon(C.shiftEvery);
+        shiftWant = (Math.random() - 0.5) * 2 * C.shiftAmount;
+      }
+      // the shift eases away on its own, so they are never left leaning
+      shiftWant = THREE.MathUtils.damp(shiftWant, 0, 0.5, dt);
+      shift = THREE.MathUtils.damp(shift, shiftWant * settled, 1.4, dt);
+
+      lookAt -= dt;
+      if (lookAt <= 0) {
+        lookAt = soon(C.lookAboutEvery);
+        lookWant = (Math.random() - 0.5) * 2 * C.lookAboutMax;
+      }
+      lookWant = THREE.MathUtils.damp(lookWant, 0, 0.35, dt);
+      look = THREE.MathUtils.damp(look, lookWant * settled, 1.1, dt);
+
+      group.rotation.z = (lean + shift * m) * ctx.motionScale;
       group.rotation.x = pitch * ctx.motionScale;
+      group.rotation.y = rig.yaw + look * m;
+
+      /* ── blinking and glancing ────────────────────────────────────────
+       * The closed part of a blink is a *window*, not an instant. A blink
+       * lasts a fifth of a second, which on a phone holding 20fps is four
+       * frames: shape it as a knife-edge and the one frame that matters gets
+       * stepped over, and the figure simply never blinks on exactly the
+       * devices least able to spare the frames.
+       */
+      if (blinkT >= 0) {
+        blinkT += dt / C.blinkSeconds;
+        if (blinkT >= 1) {
+          blinkT = -1;
+          if (blinksLeft > 0) { blinksLeft--; blinkAt = 0.09; }
+          else blinkAt = soon(C.blinkEvery);
+        }
+      } else {
+        blinkAt -= dt;
+        if (blinkAt <= 0) {
+          blinkT = 0;
+          // now and then it comes as two, because a metronome is not a creature
+          if (blinksLeft === 0 && Math.random() < C.doubleBlink) blinksLeft = 1;
+        }
+      }
+      // a broad closed window rather than a single shut instant
+      const lid = blinkT < 0 ? 1 : 1 - Math.pow(Math.sin(blinkT * Math.PI), 0.6);
+      eyeUniforms.uBlink.value = 1 - (1 - lid) * m;
+
+      glance = THREE.MathUtils.damp(glance, glanceWant, C.glanceRate, dt);
+      eyeUniforms.uGlance.value = glance;
+      eyeUniforms.uGlow.value = C.eyeGlow * (0.85 + 0.15 * Math.sin(ctx.time * 0.6));
 
       // a slow breathing bob that speeds up a little when under way
       bobPhase += dt * C.bobSpeed * (0.55 + 0.85 * speed01) * ctx.motionScale;
@@ -303,13 +492,26 @@ export function createCharacter({ CONFIG, quality, scene }) {
       localMove.set(
         rig.vx * cos - rig.vz * sin,
         rig.vx * sin + rig.vz * cos
-      ).multiplyScalar(1 / Math.max(CONFIG.movement.maxSpeed, 0.001));
+      ).multiplyScalar(1 / Math.max(topSpeed, 0.001));
 
       robeUniforms.uTime.value = ctx.time;
       robeUniforms.uSpeed.value = speed01;
       robeUniforms.uMove.value.copy(localMove);
       robeUniforms.uMotion.value = ctx.motionScale;
-      glowUniforms.uPower.value = C.glow * (0.88 + 0.12 * Math.sin(ctx.time * 0.7));
+      /* ── the light at the chest, answering what just happened ────────
+       * Its resting state is a slow breath. Gathering a mote adds a flare
+       * that decays over about a second, and an open gate ahead adds a
+       * second, faster breath — so the figure themself is part of the
+       * wayfinding rather than a passenger being pointed at one.
+       */
+      glowBoost = Math.max(0, glowBoost - dt * C.glowGatherDecay);
+      const gatePulse = gateNear * C.glowGatePulse
+                      * (0.5 + 0.5 * Math.sin(ctx.time * C.glowGateSpeed * m));
+      const power = C.glow * (0.88 + 0.12 * Math.sin(ctx.time * 0.7))
+                  + glowBoost + gatePulse;
+      glowUniforms.uPower.value = power;
+      // the eyes catch a little of whatever the chest is doing
+      eyeUniforms.uGlow.value += (glowBoost + gatePulse) * 0.35;
 
       if (shadow) {
         // sits on the ground, not on the figure: it must not bob or lean
@@ -325,6 +527,8 @@ export function createCharacter({ CONFIG, quality, scene }) {
       robeMat.dispose();
       glowGeo.dispose();
       glowMat.dispose();
+      eyeGeo.dispose();
+      eyeMat.dispose();
       if (shadow) {
         scene.remove(shadow);
         shadowGeo.dispose();

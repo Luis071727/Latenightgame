@@ -7,10 +7,11 @@
  * the settings exist because volume and motion are the player's to decide;
  * everything else fades itself away as soon as it has been understood.
  */
-export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityChange, onReset }) {
+export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityChange, onPaceChange, onReset }) {
   const hintEl = document.getElementById('hint');
   const hint2El = document.getElementById('hint2');
   const worldNameEl = document.getElementById('worldname');
+  const stepEl = document.getElementById('step');
   const soundEl = document.getElementById('sound');
   const gearEl = document.getElementById('gear');
   const panelEl = document.getElementById('panel');
@@ -73,6 +74,7 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const ambEl = document.getElementById('set-amb');
   const motionEl = document.getElementById('set-motion');
   const qualityEl = document.getElementById('set-quality');
+  const paceEl = document.getElementById('set-pace');
   const resetEl = document.getElementById('set-reset');
   const RESET_LABEL = resetEl.textContent;
 
@@ -92,6 +94,9 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
     motionEl.setAttribute('aria-pressed', String(reduced));
     for (const b of qualityEl.querySelectorAll('button')) {
       b.classList.toggle('on', b.dataset.q === settings.quality);
+    }
+    for (const b of paceEl.querySelectorAll('button')) {
+      b.classList.toggle('on', b.dataset.p === settings.pace);
     }
   }
 
@@ -150,6 +155,15 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
     settings.quality = b.dataset.q;
     reflectSettings();
     onQualityChange?.(settings.quality);
+    touch(); saveSoon();
+  });
+
+  paceEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-p]');
+    if (!b || b.dataset.p === settings.pace) return;
+    settings.pace = b.dataset.p;
+    reflectSettings();
+    onPaceChange?.(settings.pace);
     touch(); saveSoon();
   });
 
@@ -256,6 +270,24 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
         worldNameEl.classList.add('show');
         worldNameTimer = setTimeout(() => worldNameEl.classList.remove('show'), 5200);
       }, delayMs);
+    },
+
+    /** a quiet passing line — "a gate has opened" — in the world-name voice */
+    announce(text) {
+      this.showWorldName(text, 0);
+    },
+
+    /** offer or withdraw the "step through" prompt by an open gate */
+    setStepPrompt(visible) {
+      stepEl.classList.toggle('show', !!visible);
+    },
+
+    /** main installs what stepping through actually does */
+    set onStep(fn) {
+      stepEl.addEventListener('click', () => { touch(); fn?.(); });
+      stepEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); touch(); fn?.(); }
+      });
     },
 
     /** true while a gate transition is running */

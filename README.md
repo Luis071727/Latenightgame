@@ -26,9 +26,19 @@ Everything else happens by being near it:
   Gathered ones trail behind you in a slow ring, then let go and stream into the
   world's monument, which brightens and stands a little taller as they arrive.
 - **Dream-gates** stand out toward the rim of every world, dim from the first
-  moment and brightening as more of the world wakes. Walk into an open one and
-  the screen fades up into soft light, the next world is built while nothing can
-  be seen, and it fades back down. Worlds recur, so it never truly ends.
+  moment and brightening as the world wakes *or* as motes reach the monument —
+  whichever you were doing was already the way onward. A soft pillar of light
+  stands over an opening gate, so the horizon itself tells you where; the
+  companion leans that way too. Once it would admit you, a passing line says
+  so, and standing near it offers **step through** — walk in or tap, either
+  works. The screen fades up into soft light, the next world is built while
+  nothing can be seen, and it fades back down. Worlds recur, so it never ends.
+
+The wanderer has two soft lights in their hood that blink and glance at
+whatever the world has just offered, breathe and shift their weight when
+standing still, and carry a chest light that flares when a mote is gathered and
+breathes when a gate stands open. A small companion light keeps them company,
+darts off to look at anything that wakes, and drifts gateward.
 
 Each world is a floating island: rolling in the middle, a soft rim near the edge
 that turns walking outward into walking uphill, and then a drop into weather.
@@ -40,11 +50,11 @@ it won't glow all night. Any tap brings it back.
 
 It opens on a title over the live world — **begin wandering** is the tap that
 also lets the browser start the audio. A small gear in the corner opens the
-settings: sound, music and ambience volume, reduced motion, graphics quality,
-and a way to begin the journey again. The journey itself — which world you are
-in, what you have woken there, how full the monument is — is written to
-localStorage as you go, so a refresh or a phone quietly killing the tab
-overnight puts you back where you drifted off.
+settings: sound, music and ambience volume, reduced motion, **pace** (stroll,
+wander or drift), graphics quality, and a way to begin the journey again. The
+journey itself — which world you are in, what you have woken there, how full
+the monument is — is written to localStorage as you go, so a refresh or a phone
+quietly killing the tab overnight puts you back where you drifted off.
 
 ### The worlds
 
@@ -122,9 +132,29 @@ __night.progress                            // awake / gate / motes / delivered 
 __night.tier                                // which quality tier is running
 __night.downgrade()                         // step down a tier by hand
 __night.setTier('high')                     // jump to a tier, as the settings would
+__night.perf                                // fps, draw calls, triangles, instances
 __night.journey                             // what the save file currently remembers
 __night.settings                            // what the settings panel currently holds
+__night.CONFIG.debug.freeTravel = true      // open every gate at once
+__night.CONFIG.movement.paceScale = 1.8     // faster than any pace preset
+__night.companion                           // the little light, or null on saver
 ```
+
+### Travel
+
+A gate's openness is whichever of two things you have been doing more of:
+
+```
+open ← max( awakeFraction / awaken.gateAt,
+            delivered / (motes.monumentTarget * gate.gatherAt) )
+```
+
+With the defaults that is a fifth of the world's structures woken, *or* eleven
+motes delivered — and it admits you at `gate.enterAt` (0.45), so in practice a
+handful of either. `gate.enterRadius` is deliberately generous and the **step
+through** prompt appears within `gate.promptRadius`, because travel must never
+depend on threading an exact radius from a moving thumb. Set
+`CONFIG.debug.freeTravel` to open everything at once.
 
 ### Per-world tuning
 
@@ -148,25 +178,37 @@ object in that array. The fields, and what each one is actually for:
 
 ### Quality tiers
 
-The scene picks `high`, `medium` or `low` from the device's GPU string, core count
-and memory, then watches real frame times and steps down one tier if the guess was
-optimistic. It never steps back up — oscillating between tiers is far more
-noticeable than sitting one notch below perfect.
+The scene picks a tier from the device's GPU string, core count and memory, then
+watches real frame times and steps down one if the guess was optimistic. It never
+steps back up — oscillating between tiers is far more noticeable than sitting one
+notch below perfect. `saver` is the floor, meant for a phone that would rather
+stay cool than look its best, and is what the software rasterisers are given.
 
-| | high | medium | low |
+| | high | medium | low | saver |
+|---|---|---|---|---|
+| Fractal recursion depth | 5 | 4 | 3 | 3 |
+| Instance budget per world | 7000 | 3600 | 1400 | 900 |
+| Structures | 100% | 80% | 60% | 45% |
+| Menger depth | 2 (400 blocks) | 2 | 1 (20) | 1 |
+| Ground resolution | 128² | 96² | 64² | 48² |
+| Cloud layers | 3 | 2 | 1 | 0 |
+| Kaleidoscope | yes | yes | off | off |
+| Bloom | yes | yes | off | off |
+| Max motes | 48 | 34 | 20 | 14 |
+| Wanderer segments / shadow | 22 / yes | 16 / yes | 11 / no | 9 / no |
+| Companion | yes | yes | yes | no |
+| Water reflections | 512px | 256px | off (shaded plane) | off |
+| Pixel ratio cap | 2 | 1.75 | 1.2 | 1.0 |
+
+Measured on one machine, for a sense of the gradient — `__night.perf` will tell
+you the same about yours:
+
+| | instances | draw calls | triangles |
 |---|---|---|---|
-| Fractal recursion depth | 5 | 4 | 3 |
-| Instance budget per world | 7000 | 3600 | 1600 |
-| Structures | 100% | 80% | 60% |
-| Menger depth | 2 (400 blocks) | 2 | 1 (20) |
-| Ground resolution | 128² | 96² | 64² |
-| Cloud layers | 3 | 2 | 1 |
-| Kaleidoscope | yes | yes | off |
-| Bloom | yes | yes | off |
-| Max motes | 48 | 34 | 22 |
-| Wanderer segments / shadow | 22 / yes | 16 / yes | 11 / no |
-| Water reflections | 512px | 256px | off (shaded plane) |
-| Pixel ratio cap | 2 | 1.75 | 1.25 |
+| high | 7509 | 37 | 213558 |
+| medium | 3178 | 36 | 87212 |
+| low | 976 | 20 | 26798 |
+| saver | 794 | 19 | 22600 |
 
 Append `?tier=high`, `?tier=medium` or `?tier=low` to force one, or pick a tier
 in the settings panel — either way it is pinned, and the frame watcher won't
@@ -185,7 +227,8 @@ src/main.js         CONFIG, bootstrap, world loading, the frame loop
 src/worlds.js       the worlds as data, and building one
 src/fractals.js     bounded recursion, instancing, fbm, cloud sheets
 src/terrain.js      the ground heightfield, its shader, and heightAt()
-src/character.js    the wanderer: one lathe, a hem that sways, a blob shadow
+src/character.js    the wanderer: one lathe, a swaying hem, eyes, idle life
+src/companion.js    the small light that keeps them company
 src/rig.js          where the wanderer is, and the camera trailing them
 src/input.js        floating joystick, tap-to-move, keyboard
 src/motes.js        one InstancedMesh for every light-mote

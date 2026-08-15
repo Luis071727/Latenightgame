@@ -11,6 +11,7 @@ import { WORLDS, createWorldContent, makePaletteCycler } from './worlds.js';
 import { createGate } from './gate.js';
 import { createRig } from './rig.js';
 import { createCharacter } from './character.js';
+import { createCompanion } from './companion.js';
 import { createPost } from './post.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
@@ -122,6 +123,62 @@ const CONFIG = {
     swaySpeed: 1.1,
     shadowRadius: 1.15,
     shadowOpacity: 0.42,
+
+    /* The face in the hood. Two soft lights set back inside the cowl, so what
+       you see is a suggestion of a face rather than a face — the moment these
+       read as eyes with expressions the figure stops being a dream and starts
+       being a character with opinions. Keep `glow` low. */
+    eyeGlow: 0.62,           // brightness; past ~1.1 they read as headlights
+    eyeSize: 0.030,          // radius, in units
+    eyeSpacing: 0.062,       // half the distance between them
+    eyeHeight: 0.855,        // up the body, 0..1 of full height
+    // How far forward of the axis they sit. This has to clear the hood's own
+    // surface — the robe is a closed lathe and will occlude anything inside
+    // it — so it wants to stay a little above the profile radius at
+    // `eyeHeight`, which is about 0.215. Below that and the face goes dark.
+    eyeDepth: 0.232,
+    blinkEvery: 4.4,         // mean seconds between blinks
+    blinkSeconds: 0.20,      // how long one takes, closed window included
+    doubleBlink: 0.18,       // chance a blink comes as two
+    glanceMax: 0.62,         // how far the gaze shifts, as a fraction of the
+                             // eye spacing — 1 would put an eye where the
+                             // other one was, so this stays well under it
+    glanceRate: 1.6,         // how quickly it settles onto a new subject
+
+    /* Idle life. What a figure that is standing still does so that it never
+       looks paused: breathing, a slow weight-shift, an occasional look about. */
+    breathDepth: 0.012,      // how much the body swells, as a scale
+    breathSpeed: 0.42,
+    shiftEvery: 7.0,         // mean seconds between weight-shifts
+    shiftAmount: 0.035,      // radians of roll in one
+    lookAboutEvery: 11.0,    // mean seconds between idle look-arounds
+    lookAboutMax: 0.55,      // radians of head-turn in one
+
+    /* The chest light answers what is happening: it flares when a mote is
+       gathered and breathes when a gate stands open ahead. */
+    glowGather: 0.85,        // extra brightness on gathering, decaying away
+    glowGatherDecay: 1.6,    // ...per second
+    glowGatePulse: 0.30,     // depth of the breathing near an open gate
+    glowGateSpeed: 1.5,
+  },
+
+  /* The companion: one small light with a mind of its own. It orbits at a
+     distance it chooses, darts off when something wakes, and leans toward an
+     open gate — which quietly makes it the second half of the wayfinding. */
+  companion: {
+    enabled: true,
+    size: 0.85,              // radius of its glow card, in units
+    glow: 1.25,
+    orbitRadius: 1.9,        // how far off the shoulder it usually sits
+    orbitHeight: 1.5,
+    orbitSpeed: 0.55,        // radians/sec around the wanderer
+    follow: 2.6,             // damping rate toward wherever it wants to be
+    wander: 0.55,            // amplitude of its own aimless drift
+    wanderSpeed: 0.7,
+    excitedFor: 3.2,         // seconds it darts about after something wakes
+    excitedRange: 5.0,       // ...and how far out it goes while excited
+    gateLean: 0.45,          // fraction of the way it drifts toward a gate
+    gateRange: 26,           // how near the gate must be for it to care
   },
 
   world: {
@@ -203,34 +260,56 @@ const CONFIG = {
     bloomSeconds: 5.5,       // how long it takes to come fully alight
     lightPower: 2.4,         // what an awake structure does to the ground
     lightRange: 32,
-    gateAt: 0.40,            // fraction awake before the gate is fully open
+    gateAt: 0.18,            // fraction awake before the gate is fully open
   },
 
   /* Dream-gates. `atRadius` is a fraction of the world radius, so a gate is
-     always a walk away but never out past the rim. */
+     always a walk away but never out past the rim. Openness is driven by
+     whichever the player is actually doing — waking structures *or* feeding
+     the monument — so either kind of wandering leads onward:
+     open ← max(awakeFraction / awaken.gateAt,
+                delivered / (motes.monumentTarget * gate.gatherAt)). */
   gate: {
-    atRadius: 0.60,
+    atRadius: 0.52,          // a shorter walk than it was
     radius: 2.8,             // the opening itself
     thickness: 0.16,
     lift: 0.25,              // how far off the ground the ring floats
     openRate: 0.5,           // damping rate as it opens; slow is the point
-    enterAt: 0.88,           // how open it has to be before it will take you
-    enterRadius: 2.4,
+    enterAt: 0.45,           // how open it has to be before it will take you
+    enterRadius: 4.2,        // generous: walking *at* it is enough
+    promptRadius: 9,         // this close to an open gate, offer "step through"
+    gatherAt: 0.45,          // fraction of a full monument that opens it fully
     clearing: 16,            // no structures grow this close to one
+    beacon: 1.0,             // strength of the skyward light once it is opening
+  },
+
+  /* Debug switches, all off in play. `freeTravel` opens every gate at once so
+     the whole loop can be walked without earning it. */
+  debug: {
+    freeTravel: false,
   },
 
   /* Wandering. Drag anywhere for a floating joystick, tap ahead of yourself to
      drift that way, or WASD / arrow keys on a laptop. Everything is capped and
-     heavily damped — this should never feel like driving. */
+     heavily damped — this should never feel like driving.
+
+     `paceScale` multiplies maxSpeed and accel together, and is what the pace
+     setting writes: the ceilings scale but the character of the movement — the
+     heavy coast, the capped turn — stays exactly what it was. `drive` shapes
+     stick strength into travel: above 1 a light push mostly *turns* the
+     figure, so you can look around without gliding off. */
   movement: {
     maxSpeed: 2.5,           // units/sec, an unhurried walking pace
-    accel: 10.0,             // units/sec² while the stick is fully over
+    accel: 14.0,             // units/sec² while the stick is fully over
+    paceScale: 1.15,         // set from settings.pace via `paces` below
+    paces: { stroll: 0.85, wander: 1.15, drift: 1.5 },
+    drive: 1.6,              // exponent on stick strength → forward push
     damping: 0.03,           // per-second velocity decay; you settle, not skid
     maxTurnSpeed: 1.7,       // radians/sec, hard ceiling
-    turnGain: 3.2,           // how eagerly the heading chases the stick
-    turnResponse: 5.0,       // damping rate of the turn itself
-    deadzone: 12,            // px of stick offset that does nothing
-    stickRadius: 92,         // px from the origin that counts as fully over
+    turnGain: 4.0,           // how eagerly the heading chases the stick
+    turnResponse: 7.0,       // damping rate of the turn itself
+    deadzone: 10,            // px of stick offset that does nothing
+    stickRadius: 78,         // px from the origin that counts as fully over
     groundFollow: 7.0,       // how quickly the figure settles onto the ground
     edgeAt: 0.88,            // fraction of the world radius where it leans back
     edgePull: 9.0,           // units/sec² of that lean, at the very edge
@@ -304,7 +383,7 @@ const CONFIG = {
       groundCells: 128,
       fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
       mengerDepth: 2, blockSegments: 3, cloudLayers: 3, kaleidoscope: true,
-      charSegments: 22, charShadow: true,
+      charSegments: 22, charShadow: true, companion: true,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
@@ -313,17 +392,30 @@ const CONFIG = {
       groundCells: 96,
       fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
       mengerDepth: 2, blockSegments: 2, cloudLayers: 2, kaleidoscope: true,
-      charSegments: 16, charShadow: true,
+      charSegments: 16, charShadow: true, companion: true,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
-      maxMotes: 22, starScale: 0.45, particleScale: 0.6,
+      maxMotes: 20, starScale: 0.45, particleScale: 0.6,
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
       groundCells: 64,
-      fractalDepth: 3, fractalInstances: 1600, structureScale: 0.6,
+      fractalDepth: 3, fractalInstances: 1400, structureScale: 0.6,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 1, kaleidoscope: false,
-      charSegments: 11, charShadow: false,
-      bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.25,
+      charSegments: 11, charShadow: false, companion: true,
+      bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.2,
+    },
+    /* The floor. Meant for a phone that would rather stay cool than look its
+       best — and for the software rasterisers, which are fill-rate bound long
+       before they are geometry bound, so what matters most here is the pixel
+       ratio and the transparent sheets, not the instance count. */
+    saver: {
+      maxMotes: 14, starScale: 0.30, particleScale: 0.40,
+      reflections: false, reflectionSize: 0, waterNormalSize: 64,
+      groundCells: 48,
+      fractalDepth: 3, fractalInstances: 900, structureScale: 0.45,
+      mengerDepth: 1, blockSegments: 1, cloudLayers: 0, kaleidoscope: false,
+      charSegments: 9, charShadow: false, companion: false,
+      bloom: false, bloomScale: 0.30, msaa: 0, pixelRatio: 1.0,
     },
   },
 };
@@ -380,6 +472,10 @@ function start() {
   // materials render linear HDR into the composer's half-float targets.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CONFIG.render.exposure;
+  // The composer renders several times a frame and each render would reset the
+  // counters, leaving `info` describing the last fullscreen quad rather than
+  // the frame. Reset once, ourselves, at the top of the loop instead.
+  renderer.info.autoReset = false;
   document.body.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -395,12 +491,23 @@ function start() {
   const terrain  = createTerrain({ CONFIG, quality, scene });
   const rig      = createRig({ CONFIG, camera, terrain });
   let character  = createCharacter({ CONFIG, quality, scene });
+  let companion  = createCompanion({ CONFIG, quality, scene });
   let post       = createPost({ CONFIG, quality, renderer, scene, camera, motion });
+
+  // a gathered mote is acknowledged by the light at the chest
+  motes.onGather = () => character.flare();
 
   const audio = createAudio(CONFIG);
   audio.setMuted(settings.muted);
   audio.setMusicVolume(settings.musicVolume);
   audio.setAmbienceVolume(settings.ambienceVolume);
+
+  // the pace preset scales speed and acceleration together; nothing else
+  function applyPaceChoice(pace) {
+    const M = CONFIG.movement;
+    M.paceScale = M.paces[pace] ?? M.paces.wander;
+  }
+  applyPaceChoice(settings.pace);
 
   const ui = createUI({
     CONFIG,
@@ -408,10 +515,17 @@ function start() {
     settings,
     onMotionChange: applyMotionPreference,
     onQualityChange: applyQualityChoice,
+    onPaceChange: applyPaceChoice,
     onReset: resetJourney,
   });
   ui.onSettingsSave = saveSettings;
   ui.onBegin = () => ui.showWorldName(world.name, 1400);
+  ui.onStep = () => {
+    if (!ui.transitioning && gate && gate.enterable
+        && gate.distance2(rig.state.x, rig.state.z) < CONFIG.gate.promptRadius ** 2) {
+      enterGate();
+    }
+  };
 
   const input = createInput({
     CONFIG,
@@ -435,6 +549,7 @@ function start() {
   let gate = null;
   let cyclePalette = null;
   let delivered = 0;
+  let gateAnnounced = false;   // "a gate has opened" is said once per visit
 
   /* The journey: which world this is, what has been woken there, how many
      motes the monument has taken. Mirrored to localStorage so an accidental
@@ -470,6 +585,8 @@ function start() {
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
     gate = createGate({ CONFIG, scene, world, terrain });
     cyclePalette = makePaletteCycler(p, CONFIG.mood);
+    gateAnnounced = false;
+    ui.setStepPrompt(false);
 
     sky.setPalette(p);
     sky.setStars(world.stars);
@@ -481,6 +598,10 @@ function start() {
     motes.clear();
     character.setPalette(p);
     character.setFogDensity(world.fog.density);
+    if (companion) {
+      companion.setPalette(p);
+      companion.setFogDensity(world.fog.density);
+    }
     renderer.setClearColor(p.fog, 1);
     ui.setFlashColor(p.bloom);
     audio.setWorld(world.audio);
@@ -509,11 +630,18 @@ function start() {
 
     // arrive out on the plaza, facing the monument in the middle
     rig.place(0, world.ground.plazaRadius * 2.4, 0);
+    companion?.place(rig.state);
 
     // a first handful of motes already drifting, so the world is never empty
     for (let i = 0; i < Math.min(CONFIG.motes.perWorld, quality.maxMotes) * 0.6; i++) {
       spawnMote();
     }
+
+    // Warm every new shader now, while the screen is still full of gate-light
+    // (or the title, on the first load). A world's materials are new each
+    // visit, and a program that links on the first *visible* frame is a
+    // stutter exactly where the arrival should feel like an exhale.
+    renderer.compile(scene, camera);
   }
 
   /** Drop one free mote somewhere in the world, at a walkable distance. */
@@ -573,12 +701,15 @@ function start() {
     motes.dispose();
     fireflies.dispose();
     character.dispose();
+    companion?.dispose();
     post.dispose();
 
     motes = createMotes({ CONFIG, quality, scene });
     fireflies = createFireflies({ CONFIG, quality, scene });
     character = createCharacter({ CONFIG, quality, scene });
+    companion = createCompanion({ CONFIG, quality, scene });
     post = createPost({ CONFIG, quality, renderer, scene, camera, motion });
+    motes.onGather = () => character.flare();
 
     // ...and this rebuilds the ground, the fractals and the water, and
     // re-tints everything that was just replaced
@@ -604,6 +735,14 @@ function start() {
       pinned = true;
       applyTier(choice);
     }
+  }
+
+  /** walk on to the next world, through the gate's soft light. The same path
+      serves the walked-into ring and the tapped "step through" prompt. */
+  function enterGate() {
+    const next = worldIndex + 1;
+    ui.setStepPrompt(false);
+    ui.transition(() => loadWorld(next));
   }
 
   /** forget the journey and wake up back at the start, through the same
@@ -659,13 +798,19 @@ function start() {
   let ambientAt = 2;
   let moodAt = 0;
 
+  // a rolling frame rate, for tuning from the console. Smoothed hard enough
+  // that a number read off it by eye means something.
+  let fps = 60;
+
   function frame(now) {
     const rawDt = now - last;
     last = now;
     const dt = Math.min(rawDt / 1000, 0.05);   // clamp after a tab switch
     time += dt;
 
+    if (rawDt > 0 && rawDt < 400) fps += (1000 / rawDt - fps) * 0.05;
     if (frameWatch.sample(rawDt)) downgrade();
+    renderer.info.reset();
 
     const phase = (time / CONFIG.mood.periodSeconds) * Math.PI * 2;
     ctx.time = time;
@@ -701,10 +846,11 @@ function start() {
     // does brings up one more layer of the pad. Suspended during a transition,
     // or arriving somewhere would light whatever happened to be near the spot.
     if (!ui.transitioning) {
-      content.updateAwakening(dt, rig.state.x, rig.state.z, (i) => {
+      content.updateAwakening(dt, rig.state.x, rig.state.z, (i, s) => {
         audio.addLayer();
         journey.awakened.add(i);
         saveJourneySoon();
+        companion?.notice(s.x, s.y, s.z);   // off it goes to look
       });
     }
 
@@ -723,13 +869,50 @@ function start() {
     }
     content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
 
-    // the gate opens on how much of this world has come awake, and takes you
-    // on to the next one if you walk into it
-    gate.update(dt, ctx, content.awakeFraction / CONFIG.awaken.gateAt);
-    if (!ui.transitioning && gate.entered(rig.state.x, rig.state.z)) {
-      const next = worldIndex + 1;
-      ui.transition(() => loadWorld(next));
+    // The gate opens on whichever the player has actually been doing — waking
+    // structures or carrying motes to the monument — so either kind of
+    // wandering leads onward. Walking into it takes you to the next world.
+    const wantedOpen = CONFIG.debug.freeTravel ? 1 : Math.max(
+      content.awakeFraction / CONFIG.awaken.gateAt,
+      delivered / (CONFIG.motes.monumentTarget * CONFIG.gate.gatherAt)
+    );
+    gate.update(dt, ctx, wantedOpen);
+
+    // say so, quietly, the moment it would admit you
+    if (!gateAnnounced && gate.enterable) {
+      gateAnnounced = true;
+      if (ui.began) ui.announce('a gate has opened');
     }
+
+    // standing before an open gate, offer the step — travel must never depend
+    // on threading an exact radius from a moving thumb
+    ui.setStepPrompt(
+      !ui.transitioning && gate.enterable
+      && gate.distance2(rig.state.x, rig.state.z) < CONFIG.gate.promptRadius ** 2
+    );
+
+    if (!ui.transitioning && gate.entered(rig.state.x, rig.state.z)) enterGate();
+
+    /* ── what the wanderer is currently paying attention to ────────────
+     * An open gate outranks a mote: by the time one is open it is the more
+     * interesting thing in the world. Otherwise they watch the nearest mote
+     * they have not yet picked up, and failing that, look where they walk.
+     */
+    const gateD2 = gate.distance2(rig.state.x, rig.state.z);
+    const gateCall = gate.enterable
+      ? 1 - Math.min(1, Math.sqrt(gateD2) / CONFIG.companion.gateRange)
+      : 0;
+    character.setGateNear(gateCall);
+
+    if (gateCall > 0.25) {
+      character.lookToward(gate.position.x, gate.position.z);
+    } else {
+      const near = motes.nearestFree(rig.state.x, rig.state.z, CONFIG.motes.attractRadius);
+      if (near) character.lookToward(near.x, near.z);
+      else character.lookToward(null);
+    }
+
+    companion?.update(dt, ctx, rig.state, gate);
 
     // the ground takes light from the motes and from whatever is awake, as
     // one list of the nearest few
@@ -777,6 +960,7 @@ function start() {
     renderer, scene, camera, rig, terrain,
     get post() { return post; },
     get character() { return character; },
+    get companion() { return companion; },
     get gate() { return gate; },
     get motes() { return motes; },
     /** wake the whole world at once, for looking at what that does */
@@ -796,6 +980,21 @@ function start() {
     get world() { return world.key; },
     get instances() { return content.instances; },
     get structures() { return content.structures; },
+
+    /** what the renderer is actually doing, for tuning a tier by hand */
+    get perf() {
+      const info = renderer.info.render;
+      return {
+        fps: Math.round(fps),
+        tier: tierName,
+        instances: content.instances,
+        motes: motes.count,
+        drawCalls: info.calls,
+        triangles: info.triangles,
+        pixelRatio: +pixelRatio.toFixed(2),
+        programs: renderer.info.programs?.length ?? 0,
+      };
+    },
     /** where the loop currently stands, for tuning it without playing it */
     get progress() {
       return {

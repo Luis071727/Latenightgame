@@ -158,11 +158,16 @@ export function createMotes({ CONFIG, quality, scene }) {
 
   let freeCount = 0;
   let heldCount = 0;
+  // fired the moment a free mote decides to come along, so the wanderer can
+  // acknowledge it. Installed by the caller; absent by default.
+  let onGather = null;
 
   function spawn(x, y, z) {
-    let s;
     if (active.length >= capacity) return null;   // never evict a held mote
-    s = slots.find((v) => !v.active);
+    let s = null;
+    for (let i = 0; i < slots.length; i++) {
+      if (!slots[i].active) { s = slots[i]; break; }
+    }
     if (!s) return null;
 
     s.active = true;
@@ -224,6 +229,7 @@ export function createMotes({ CONFIG, quality, scene }) {
         if (d2 < gather2) {
           s.state = HELD;
           s.held = 0;
+          onGather?.(s);
         } else if (d2 < attract2) {
           // A gentle lean toward whoever is nearby, well before they are close
           // enough to gather. Without it a mote is a 3-metre target in a
@@ -266,7 +272,10 @@ export function createMotes({ CONFIG, quality, scene }) {
         const dx = s.x - to.x, dy = s.y - to.y, dz = s.z - to.z;
         if (dx * dx + dy * dy + dz * dz < M.arriveRadius * M.arriveRadius) {
           s.active = false;
-          active.splice(i, 1);
+          // swap-remove: instance order is repacked every frame anyway, and
+          // splice allocates its removed-elements array on every delivery
+          active[i] = active[active.length - 1];
+          active.pop();
           delivered++;
           continue;
         }
@@ -325,7 +334,26 @@ export function createMotes({ CONFIG, quality, scene }) {
     spawn,
     update,
 
+    /** called with the mote the moment it is picked up */
+    set onGather(fn) { onGather = fn; },
+
     get count() { return active.length; },
+
+    /**
+     * The nearest free mote to a point, or null. What the wanderer's eyes
+     * follow — held motes are already theirs and not worth looking at.
+     */
+    nearestFree(x, z, within) {
+      let best = null;
+      let bestD2 = within * within;
+      for (const s of active) {
+        if (s.state !== FREE || s.vis <= 0.2) continue;
+        const dx = s.x - x, dz = s.z - z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bestD2) { bestD2 = d2; best = s; }
+      }
+      return best;
+    },
     /** live positions, for tuning the gathering radius from the console */
     debug() {
       return active.map((s) => ({ x: +s.x.toFixed(1), y: +s.y.toFixed(1), z: +s.z.toFixed(1), state: s.state, held: +s.held.toFixed(1) }));
@@ -367,8 +395,11 @@ export function createMotes({ CONFIG, quality, scene }) {
         let at = nearest.length;
         while (at > 0 && nearest[at - 1].dist2 > s.dist2) at--;
         if (at >= k) continue;
-        nearest.splice(at, 0, s);
-        if (nearest.length > k) nearest.length = k;
+        // shift-insert by hand: splice allocates its return array every call,
+        // and this runs for every lit mote every frame
+        if (nearest.length < k) nearest.length++;
+        for (let j = nearest.length - 1; j > at; j--) nearest[j] = nearest[j - 1];
+        nearest[at] = s;
       }
       return nearest;
     },
