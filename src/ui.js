@@ -1,0 +1,113 @@
+/**
+ * The bits around the edges: the opening hint, the mute button, the sleep
+ * fade, and the screen wake lock.
+ */
+export function createUI({ CONFIG, audio }) {
+  const hintEl = document.getElementById('hint');
+  const soundEl = document.getElementById('sound');
+  const veilEl = document.getElementById('veil');
+
+  let touched = false;
+  let dim = 1;                  // 1 = awake, 0 = fully asleep
+  let wokeFromSleep = false;
+  let lastInteraction = performance.now();
+  let lastFadeUpdate = performance.now();
+  let wakeLock = null;
+
+  /* ── hint ──────────────────────────────────────────────────────────── */
+  const hintTimer = setTimeout(() => {
+    if (!touched) hintEl.classList.add('show');
+  }, CONFIG.ui.hintDelayMs);
+
+  /* ── wake lock (optional everywhere, present almost nowhere) ───────── */
+  async function requestWakeLock() {
+    if (!CONFIG.ui.wakeLock || !('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch { /* refused or unsupported — the scene doesn't depend on it */ }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !wakeLock && touched) requestWakeLock();
+  });
+
+  /* ── mute ──────────────────────────────────────────────────────────── */
+  function toggleMute() {
+    soundEl.classList.toggle('muted', audio.toggleMute());
+    lastInteraction = performance.now();
+  }
+  soundEl.addEventListener('click', toggleMute);
+  soundEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMute(); }
+  });
+
+  return {
+    /** true once the first touch has landed */
+    get touched() { return touched; },
+    get dim() { return dim; },
+
+    /**
+     * Called on every pointer event. The first one starts audio and clears
+     * the hint; the rest just keep the sleep timer at bay.
+     */
+    wake() {
+      if (dim < 0.9) wokeFromSleep = true;
+      lastInteraction = performance.now();
+
+      if (!touched) {
+        touched = true;
+        clearTimeout(hintTimer);
+        hintEl.classList.remove('show');
+        soundEl.classList.add('show');
+        audio.start();
+        requestWakeLock();
+      }
+    },
+
+    /**
+     * True when the gesture that just ended was the one that woke the scene
+     * from a deep fade — that tap should only bring the light back, not also
+     * release a lantern.
+     */
+    consumeWakeTap() {
+      const was = wokeFromSleep;
+      wokeFromSleep = false;
+      return was;
+    },
+
+    update(_dt, renderer) {
+      const now = performance.now();
+      const idle = (now - lastInteraction) / 1000;
+
+      // The fade runs on wall-clock time, not the render loop's clamped delta.
+      // "Dims after ten minutes, over about a minute" should mean the same
+      // thing on a phone struggling at 20fps as on one holding 60 — and a
+      // clamped dt would quietly stretch it out on exactly the slow devices
+      // where the screen is most likely to be left glowing all night.
+      const realDt = Math.min((now - lastFadeUpdate) / 1000, 1);
+      lastFadeUpdate = now;
+
+      let target = 1;
+      if (idle > CONFIG.ui.sleepAfterSeconds) {
+        target = 1 - (idle - CONFIG.ui.sleepAfterSeconds) / CONFIG.ui.sleepFadeSeconds;
+        target = Math.max(0, Math.min(1, target));
+      }
+
+      // waking is quick and gentle; falling asleep takes its time
+      const rate = target > dim
+        ? 1 / CONFIG.ui.wakeFadeSeconds
+        : 1.4 / CONFIG.ui.sleepFadeSeconds;
+      dim += Math.max(-rate * realDt, Math.min(rate * realDt, target - dim));
+      dim = Math.max(0, Math.min(1, dim));
+
+      // One number carries the fade: OutputPass reads the renderer's exposure
+      // every frame, so this dims the lake, the lanterns and the bloom at once.
+      renderer.toneMappingExposure = CONFIG.render.exposure * (0.18 + 0.82 * dim);
+      // ...and the veil takes it the last of the way to true black
+      veilEl.style.opacity = (1 - dim).toFixed(3);
+
+      audio.setDim(dim);
+      return dim;
+    },
+  };
+}
