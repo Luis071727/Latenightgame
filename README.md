@@ -96,7 +96,7 @@ you have on coming home:
 
 | | |
 |---|---|
-| **the gallery** | *what have I found?* — one slot per memory in the game, in four arcs of twelve. Found ones burn and turn; unfound ones stay as dim empty sockets. The gaps are the half that does the work. |
+| **the gallery** | *what have I found?* — one slot per memory in the game, in four arcs of twelve. Found ones burn and turn; unfound ones stay as dim empty sockets. The gaps are the half that does the work. Everything in it notices you coming, and **walking up to one names it** — a memory of yours gives its name and its line, an empty place says only which world it belongs to. |
 | **the cairn** | *how far have I come?* — a spiral of stones rising around the monument, one for every memory kept, coloured by how rare it was. |
 | **the world marks** | *where have I been?* — four standing stones, sunk to a stub until you have walked there, then rising and brightening as the place comes to be known. How many are lit is your count of worlds visited. |
 | **the constellations** | *how much of each place is mine?* — a cluster of stars over each world's arc, of which the fraction alight is that world's completion. |
@@ -116,8 +116,11 @@ one or two lines, and each carries the framing while quietly teaching the thing
 you are about to need. The first-gate passage is what tells you both what
 opened it and that you travel by walking in.
 
-They never block, never wait to be dismissed, and moving puts one away early —
-after a two-second floor, so it cannot vanish before it could be read.
+They never block and never wait to be dismissed. Moving puts one away, but not
+until it has actually been on screen long enough to read: the time is worked
+out from how many words the passage has, so a two-line beat gets about thirteen
+seconds before movement will take it, and a few more if you stand still. Tune it
+with `story.readBase` and `story.readPerWord`.
 
 There is also a **whisper**: if you have made no progress of any kind for a
 good while, one soft line suggests the thing you are nearest to being able to
@@ -358,7 +361,10 @@ The knobs added in this pass, and what each is for:
 | `movement.turnGain` / `turnResponse` | low gain with high response is what eases: the rate asked for is small, and the turn tracks it closely enough not to overshoot and hunt. |
 | `movement.headingTurnArc` / `headingTurnDrive` | the `heading` scheme only: how far off the facing a full stick asks for, and what a turn with no forward is worth. |
 | `camera.rotateFollow` / `maxSwingLag` | how quickly the view swings *around* the wanderer, as opposed to how quickly it catches up when they walk away. Kept well under `camera.follow`; the lag is capped so a spin cannot put the figure at the edge of the frame. |
-| `story.holdSeconds` / `minHoldSeconds` / `gapSeconds` | how long a passage stays, the least it stays before moving skips it, and the quiet between two. |
+| `story.readBase` / `readPerWord` / `lingerSeconds` / `gapSeconds` | how long a passage stays, worked out from its own length: a base, plus time per word, plus a little longer if nobody moves. |
+| `sanctuary.nearRadius` / `readRadius` | how close before a memory notices you, and how close before it says what it is. |
+| `sanctuary.nearRise` / `nearSwell` / `nearGlow` | how much it lifts, grows and brightens as you come up to it. |
+| `motes.nearFadeFrom` / `nearFadeTo` / `nearFadeFloor` | how much light a mote's halo gives up near the lens. The gathered ring orbits a few metres from the camera where a halo card covers a huge share of the screen; distant motes are untouched. |
 | `story.whispers` and the four `whisper*` numbers | every restraint on the idle nudge. Set `whispers: false` to keep the beats and drop the nudging entirely. |
 | `render.adaptFrom` / `adaptStrength` / `adaptFloor` / `adaptDown` / `adaptUp` | the adaptive exposure. It closes faster than it opens, the way an eye does, and `adaptFloor` stays near 1 — this must never be something you can catch happening. |
 | `ground.lightClamp` | what all six ground lights together may add up to, at most. Soft-clamped rather than cut, so a quiet world is untouched and a blazing one bends over toward this instead of running away to white. |

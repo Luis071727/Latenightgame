@@ -80,14 +80,23 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
       const radius = S.radius + row * S.rowGap + (rar.glow - 0.85) * S.rarityPush;
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
+      const ground = terrain.heightAt(x, z);
       slots.push({
         id: d.id,
         world: key,
+        name: d.name,
+        note: d.note,
+        rarityKey: d.rarity,
         x, z,
-        y: terrain.heightAt(x, z) + S.lift + (rar.glow - 0.85) * S.rarityRise,
+        baseY: ground + S.lift + (rar.glow - 0.85) * S.rarityRise,
+        y: ground + S.lift + (rar.glow - 0.85) * S.rarityRise,
         rarity: rar,
         found: found.includes(d.id),
         phase: (w * 1.7) + i * 0.6,
+        // 0..1, how aware of the wanderer it is — the same idea the fragments
+        // out in the worlds use, so a memory behaves the same way whether you
+        // are finding it or visiting it
+        near: 0,
       });
     });
   });
@@ -478,8 +487,28 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
       return best;
     },
 
-    update(dt, ctx) {
+    /**
+     * The memory the wanderer is close enough to be *reading*, or null.
+     *
+     * Separate from `nearestTo` and much tighter, because the two want
+     * different things: the eyes follow the nearest thing from across the
+     * room, but a memory should only say what it is once you have walked up
+     * and stood in front of it. Anything looser and the room narrates itself
+     * at you continuously as you cross it.
+     */
+    readingAt(x, z) {
+      let best = null, bestD2 = S.readRadius * S.readRadius;
+      for (const s of slots) {
+        const dx = s.x - x, dz = s.z - z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bestD2) { bestD2 = d2; best = s; }
+      }
+      return best;
+    },
+
+    update(dt, ctx, who) {
       const t = ctx.time * ctx.motionScale;
+      const notice2 = S.nearRadius * S.nearRadius;
 
       if (!stoneWritten) writeStones();
       if (!starsWritten) writeStars();
@@ -496,10 +525,24 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
         const s = slots[i];
         const breathe = 0.85 + 0.15 * Math.sin(t * 0.5 + s.phase);
 
+        /* Notice the wanderer. Without this the gallery is a diorama you walk
+           past — the things in it never acknowledge you, so there is nothing
+           to tell you they can be approached at all, and a room full of
+           objects that do not react reads as scenery rather than as yours. */
+        if (who) {
+          const dx = s.x - who.x, dz = s.z - who.z;
+          const d2 = dx * dx + dz * dz;
+          const want = d2 > notice2 ? 0 : 1 - Math.sqrt(d2) / S.nearRadius;
+          s.near = THREE.MathUtils.damp(s.near, want, 2.0, dt);
+        }
+        s.y = s.baseY + s.near * S.nearRise;
+
         // a found memory turns slowly and burns; an empty place barely
         // registers, which is exactly how a gap should feel
-        const scale = s.found ? s.rarity.size * S.foundScale : S.emptySize;
-        const power = s.found ? s.rarity.glow * breathe : S.emptyGlow;
+        const scale = (s.found ? s.rarity.size * S.foundScale : S.emptySize)
+                    * (1 + s.near * S.nearSwell);
+        const power = (s.found ? s.rarity.glow * breathe : S.emptyGlow)
+                    * (1 + s.near * S.nearGlow);
         const col = s.found ? lit : dim;
 
         dummy.position.set(s.x, s.y + Math.sin(t * 0.35 + s.phase) * S.bob, s.z);

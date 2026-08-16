@@ -90,11 +90,28 @@ export function createMotes({ CONFIG, quality, scene }) {
   glowGeo.setAttribute('gTint', gTint);
   glowGeo.setAttribute('gPower', gPower);
 
+  /* Gathered motes trail in a ring a couple of metres behind the wanderer, and
+     the camera sits just behind that — so a held mote's halo card is one of the
+     closest things to the lens in the entire scene, and a card that close
+     covers an enormous share of the screen. Twenty of them overlapping there
+     is the single brightest thing the game can produce, and it happens exactly
+     when the player is doing the thing the game is about.
+
+     So a halo gives up most of its light when it is near the camera and all of
+     it at a distance. This is not the crowding clamp — that one counts how
+     many there are, this one is about where they are — and the two compose:
+     the ring behind your shoulder dims hard, while a mote out across the
+     meadow is left completely alone. */
   const glowMat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uFogDensity: { value: CONFIG.world.fogDensity } },
+    uniforms: {
+      uFogDensity: { value: CONFIG.world.fogDensity },
+      uNearFrom:   { value: M.nearFadeFrom },
+      uNearTo:     { value: M.nearFadeTo },
+      uNearFloor:  { value: M.nearFadeFloor },
+    },
     vertexShader: /* glsl */`
       attribute vec3 gTint;
       attribute float gPower;
@@ -114,7 +131,7 @@ export function createMotes({ CONFIG, quality, scene }) {
         gl_Position = projectionMatrix * vec4(centre.xyz + vec3(position.xy * s, 0.0), 1.0);
       }`,
     fragmentShader: /* glsl */`
-      uniform float uFogDensity;
+      uniform float uFogDensity, uNearFrom, uNearTo, uNearFloor;
       varying vec2 vUv;
       varying vec3 vTint;
       varying float vPower, vDepth;
@@ -123,7 +140,9 @@ export function createMotes({ CONFIG, quality, scene }) {
         float d = length(vUv - 0.5) * 2.0;
         float f = max(0.0, 1.0 - d);
         float fog = 1.0 - exp(-pow(vDepth * uFogDensity, 2.0));
-        gl_FragColor = vec4(vTint * (pow(f, 2.3) * 0.32 + pow(f, 6.0) * 1.5) * vPower * (1.0 - fog), 1.0);
+        // close to the lens is where a halo does the most damage per mote
+        float near = mix(uNearFloor, 1.0, smoothstep(uNearFrom, uNearTo, vDepth));
+        gl_FragColor = vec4(vTint * (pow(f, 2.3) * 0.32 + pow(f, 6.0) * 1.5) * vPower * near * (1.0 - fog), 1.0);
       }`,
   });
 
