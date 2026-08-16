@@ -62,17 +62,28 @@
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
 
+  /* `touch-action` is deliberately NOT `none` here.
+     The effective touch-action for a gesture is the intersection of the value
+     on the touched element and on every ancestor of it, so `none` on the body
+     disabled panning inside the dream archive and the settings card however
+     they were declared themselves — the second half of why neither could be
+     scrolled by a finger. `manipulation` keeps double-tap zoom off everywhere
+     and leaves panning to whatever is actually under the thumb.
+     The world stays perfectly still by two other means that are unaffected:
+     `touch-action: none` on the canvas below, and the scoped touchmove guard
+     in input.js. */
   html, body {
     margin: 0; padding: 0;
     width: 100%; height: 100%;
     background: #2b2740;
     overflow: hidden;
     overscroll-behavior: none;          /* no pull-to-refresh */
-    touch-action: none;                 /* no pan / pinch-zoom */
+    touch-action: manipulation;         /* no double-tap zoom */
     -webkit-user-select: none; user-select: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
+  /* the world itself: no pan, no pinch, nothing but the joystick */
   canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
   /* faint first-run hint */
@@ -408,6 +419,7 @@
     max-height: 85dvh;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
     overscroll-behavior: contain;
     margin-bottom: max(16px, env(safe-area-inset-bottom));
     box-sizing: border-box;
@@ -479,6 +491,9 @@
     appearance: none; -webkit-appearance: none;
     flex: 1; max-width: 190px; height: 26px;
     background: transparent; cursor: pointer;
+    /* the card around this one pans; a finger on the slider is setting a
+       volume, not scrolling, so it keeps the gesture to itself */
+    touch-action: none;
   }
   input[type="range"]::-webkit-slider-runnable-track {
     height: 2px; border-radius: 1px;
@@ -622,6 +637,10 @@
 
   #journal .j-body {
     flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    /* say outright that this one pans vertically, so the declaration does not
+       depend on inheriting permission from the body */
+    touch-action: pan-y;
+    overscroll-behavior: contain;       /* the world behind it does not move */
     padding: 4px 22px calc(28px + env(safe-area-inset-bottom));
   }
   .j-page { display: flex; flex-direction: column; gap: 22px; padding-top: 20px; }

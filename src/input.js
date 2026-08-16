@@ -198,9 +198,38 @@ export function createInput({ CONFIG, domElement, getHeading, onWake, onTap }) {
   domElement.addEventListener('pointercancel', onCancel, { passive: true });
   domElement.addEventListener('pointerleave', onCancel, { passive: true });
 
+  /* ── keeping the world still, without freezing the archive ──────────────
+   *
+   * The world must not pan, bounce or pull-to-refresh under a thumb that is
+   * steering, and the only reliable way to say so is to prevent the default on
+   * touchmove. But this listener is on `document`, so until it was scoped it
+   * also prevented the default on a touch that started inside the dream
+   * archive or the settings card — both of which are real scroll containers
+   * with correct heights, and neither of which could be scrolled by a finger
+   * as a result. The CSS was never the problem; this line was.
+   *
+   * So: surfaces that own their own scrolling are handed back to the browser,
+   * and everything else is still held perfectly still. Add a new scrolling
+   * surface to this list and it will scroll.
+   */
+  const SCROLLS = '#journal .j-body, #panel-card';
+
+  /** true when this gesture began inside something that scrolls itself */
+  function overScrollable(e) {
+    const t = e.target;
+    return !!(t && typeof t.closest === 'function' && t.closest(SCROLLS));
+  }
+
   // belt and braces against scroll / zoom / double-tap zoom on mobile
   const stop = (e) => e.preventDefault();
-  document.addEventListener('touchmove', stop, { passive: false });
+  const stopUnlessScrolling = (e) => {
+    // touchmove's target is where the touch *started*, so this holds for the
+    // whole gesture — a drag that begins in the archive and wanders out over
+    // the world still scrolls the archive, which is what a finger expects
+    if (overScrollable(e)) return;
+    e.preventDefault();
+  };
+  document.addEventListener('touchmove', stopUnlessScrolling, { passive: false });
   document.addEventListener('gesturestart', stop, { passive: false });
   document.addEventListener('dblclick', stop, { passive: false });
   document.addEventListener('contextmenu', stop);
@@ -341,7 +370,7 @@ export function createInput({ CONFIG, domElement, getHeading, onWake, onTap }) {
       domElement.removeEventListener('pointerup', onUp);
       domElement.removeEventListener('pointercancel', onCancel);
       domElement.removeEventListener('pointerleave', onCancel);
-      document.removeEventListener('touchmove', stop);
+      document.removeEventListener('touchmove', stopUnlessScrolling);
       document.removeEventListener('gesturestart', stop);
       document.removeEventListener('dblclick', stop);
       document.removeEventListener('contextmenu', stop);
