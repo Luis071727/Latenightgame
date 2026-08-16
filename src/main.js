@@ -1520,12 +1520,14 @@ function start() {
     },
     /** wake the whole world at once, for looking at what that does */
     wakeAll() {
+      // This used to write to `journey` and call `saveJourneySoon`, neither of
+      // which has existed since the archive replaced the old save record — so
+      // it threw on the first structure it woke.
       const was = CONFIG.awaken.radius;
       CONFIG.awaken.radius = 1e6;
       content.updateAwakening(0, rig.state.x, rig.state.z, (i) => {
         audio.addLayer();
-        journey.awakened.add(i);
-        saveJourneySoon();
+        if (!inSanctuary) archive.noteAwakened(world.key, i, content.awake);
       });
       CONFIG.awaken.radius = was;
       return content.awake;
