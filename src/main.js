@@ -613,6 +613,40 @@ const CONFIG = {
     layerGain: 0.16,
     layerFadeSeconds: 7,     // a layer arriving must never be an event
     glideSeconds: 2.5,       // how long a world change takes to slide pitch
+
+    /* The chord, moving on. Every `driftSeconds` each layer steps to the next
+       degree of the world's scale and takes `driftGlideSeconds` to get there,
+       so the music is never where you left it and there is never a moment at
+       which it changed. Set driftSeconds to 0 to hold one voicing forever. */
+    driftSeconds: 52,
+    driftGlideSeconds: 14,
+
+    /* Stereo. `width` scales everything — 0 is mono — and `panSeconds` is how
+       long one voice takes to wander across its part of the field. Minutes, on
+       purpose: this is meant to stop the sound having a location, not to be
+       heard as movement. */
+    width: 0.55,
+    panSeconds: 105,
+
+    /* Timbre, as fallbacks. Each world names its own (see worlds.js):
+       `spread` is the chorus width in cents, `shimmer` how much of the
+       brighter of each layer's two voices is present, 0..1. */
+    spread: 8,
+    shimmer: 0.5,
+
+    /* The bells. `chimeGain` is the whole bus, so one number turns them down
+       against everything else; `chimeAttack` is long enough that no bell has
+       an edge on it, and `chimeSeconds` is the tail at the softest rarity —
+       rarer finds ring longer. */
+    chimeGain: 0.30,
+    chimeAttack: 0.09,
+    chimeSeconds: 6.5,
+    chimeBrightness: 3800,   // lowpass over the bells, in Hz. Lower is softer.
+
+    /* How far the pad closes down when the sleep fade is fully out, 0..1.
+       Lower is darker. Falling asleep to something should make it duller as
+       well as quieter. */
+    idleSettle: 0.42,
   },
 
   /* The slow colour drift. Every world's palette breathes between itself and
@@ -1189,7 +1223,10 @@ function start() {
       { id: d.id, world: d.world, rarity: d.rarity });
     character.flare();
     companion?.notice(it.x, it.y, it.z);
-    // a rarer find brings the world up a layer with it
+    // the world says something back: a bell in the chord it is already
+    // playing, pitched and held by how rare the thing was
+    audio.chime(RARITY[d.rarity]?.chime ?? 0);
+    // ...and a rarer find brings the world up a layer with it
     if (RARITY[d.rarity]?.chime >= 2) audio.addLayer();
     // and the monument answers, since knowing a world is part of mastery
     content.setMasteryForm(archive.monumentForm(world.key));
@@ -1361,7 +1398,7 @@ function start() {
     if (!ui.transitioning) {
       content.updateAwakening(dt, rig.state.x, rig.state.z, (i, s) => {
         if (inSanctuary) return;      // nothing here sleeps, or is scored
-        audio.addLayer();
+        audio.addLayer(true);         // ...and it is heard arriving
         story.note('awaken');
         archive.noteAwakened(world.key, i, content.awake);
         analytics.track(EVENTS.structureAwakened, { world: world.key });
