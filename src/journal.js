@@ -50,7 +50,7 @@ export function createJournal({
     if (!b) return;
     tab = b.dataset.tab;
     onTab?.(tab);
-    render();
+    render(true);
   });
 
   closeEl.addEventListener('click', () => hide());
@@ -429,12 +429,23 @@ export function createJournal({
 
   /* ── rendering ───────────────────────────────────────────────────────── */
 
-  function render() {
+  /**
+   * @param toTop true when the page has actually changed — opening the
+   *   archive, or moving to another tab.
+   *
+   * Equipping something re-renders the tab it is on, and those tabs are long:
+   * the wanderer tab is well over two thousand pixels once every badge is in
+   * it. Sending the view back to the top every time meant choosing a cloak
+   * halfway down threw you up to the first title, which reads as the archive
+   * having lost your place — so the scroll position is kept across a re-render
+   * of the same page and only reset when the page is a different one.
+   */
+  function render(toTop = false) {
     for (const b of tabsEl.querySelectorAll('button')) {
       b.classList.toggle('on', b.dataset.tab === tab);
     }
+    const was = bodyEl.scrollTop;
     bodyEl.textContent = '';
-    bodyEl.scrollTop = 0;
     bodyEl.appendChild(
       tab === 'worlds' ? renderWorlds()
       : tab === 'memories' ? renderMemories()
@@ -442,12 +453,13 @@ export function createJournal({
       : tab === 'beside' ? renderBeside()
       : renderJourney()
     );
+    bodyEl.scrollTop = toTop ? 0 : was;
   }
 
   function show(which) {
     if (which) tab = which;
     open = true;
-    render();
+    render(true);
     root.classList.add('open');
     root.setAttribute('aria-hidden', 'false');
   }
