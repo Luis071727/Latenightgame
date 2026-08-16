@@ -31,6 +31,13 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
   const all = discoveriesOf(world.key);
   const state = archive.worldState(world.key);
 
+  /* The journey-wide numbers, read once at build rather than per candidate:
+     both of these walk every world, and a world holding a dozen discoveries
+     would otherwise total the whole archive a dozen times over to lay out one
+     island. */
+  const summary = archive.summary();
+  const worldMastery = archive.mastery(world.key).value;
+
   /** is a locked discovery's condition met yet? */
   function available(d) {
     if (!d.needs) return true;
@@ -39,6 +46,12 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
     if (n.delivered !== undefined && state.delivered < n.delivered) return false;
     if (n.visits !== undefined && state.visits < n.visits) return false;
     if (n.found !== undefined && !n.found.every((id) => found.includes(id))) return false;
+    // the long tail: things that wait on the journey rather than on the place,
+    // so that a world you finished long ago has something in it that was not
+    // there when you left
+    if (n.mastery !== undefined && worldMastery + 1e-6 < n.mastery) return false;
+    if (n.completion !== undefined && summary.completion + 1e-6 < n.completion) return false;
+    if (n.worldsVisited !== undefined && summary.worldsVisited < n.worldsVisited) return false;
     return true;
   }
 

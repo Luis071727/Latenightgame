@@ -66,18 +66,26 @@ export const PLACE = {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /*
- * Per world: five that make up its set, two rare, and one that asks something
- * of you first.
+ * Per world: five that make up its set, then the ones that ask something of
+ * you — two rare out at the edges, two that only appear once you have come
+ * back to the place more than once, and two that wait on the journey as a
+ * whole rather than on this world.
  *
  * `needs` is what has to be true before it will show itself at all, and is the
  * whole of the secret system:
- *   awake     this many structures woken in this world, this visit or before
- *   delivered this many motes given to the monument
- *   visits    this is at least your nth arrival here
- *   found     these discovery ids are already in the archive
+ *   awake         this many structures woken in this world, this visit or before
+ *   delivered     this many motes given to the monument
+ *   visits        this is at least your nth arrival here
+ *   found         these discovery ids are already in the archive
+ *   mastery       this world is known this well, 0..1
+ *   completion    this fraction of every memory in the game is kept, 0..1
+ *   worldsVisited this many of the four have been walked in
  *
  * A discovery with `needs` is invisible until it is met — which is what makes
- * the journal's row of question marks worth chasing.
+ * the journal's row of question marks worth chasing. The last three are the
+ * long tail: they are what makes a world you finished months ago worth
+ * standing in again, because there is now something in it that was not there
+ * when you left.
  */
 export const DISCOVERIES = {
   meadow: [
@@ -100,6 +108,17 @@ export const DISCOVERIES = {
     { id: 'meadow-dreaming', name: 'The Meadow Dreaming', rarity: 'dream',   place: 'monument',
       needs: { awake: 12 },
       note: 'With enough of it awake, the meadow dreams of itself, and leaves this behind.' },
+
+    { id: 'grass-hour',      name: 'Grass Hour',         rarity: 'common',   place: 'wander',
+      note: 'However long you stand in it, it is this hour. It has always been this hour.' },
+    { id: 'kept-morning',    name: 'Kept Morning',       rarity: 'uncommon', place: 'rim',
+      note: 'Someone put a morning aside for later and then never had a later.' },
+    { id: 'the-long-field',  name: 'The Long Field',     rarity: 'rare',     place: 'fog',
+      needs: { visits: 3 },
+      note: 'It only goes on this far on the third time of asking.' },
+    { id: 'meadow-keeping',  name: 'What the Meadow Keeps', rarity: 'mythic', place: 'monument',
+      needs: { completion: 0.55 },
+      note: 'It has been holding this for you since the beginning, in case you came far enough back.' },
   ],
 
   harbor: [
@@ -122,6 +141,17 @@ export const DISCOVERIES = {
     { id: 'tide-turning',    name: 'The Tide Turning',   rarity: 'dream',    place: 'water',
       needs: { delivered: 10 },
       note: 'Give the spire enough light and the water changes its mind.' },
+
+    { id: 'rope-memory',     name: 'Rope Memory',        rarity: 'common',   place: 'wander',
+      note: 'Still tied. Whatever it was tied to has gone on without it.' },
+    { id: 'low-water',       name: 'Low Water',          rarity: 'uncommon', place: 'water',
+      note: 'The harbour at its most honest, which is also its emptiest.' },
+    { id: 'the-far-bell',    name: 'The Far Bell',       rarity: 'rare',     place: 'fog',
+      needs: { visits: 3 },
+      note: 'There is a second bell further out. You have to have been here a while to hear it.' },
+    { id: 'harbour-keeping', name: 'What the Harbour Keeps', rarity: 'mythic', place: 'water',
+      needs: { mastery: 0.75 },
+      note: 'Know the place well enough and the water gives something back rather than taking it.' },
   ],
 
   grove: [
@@ -144,6 +174,17 @@ export const DISCOVERIES = {
     { id: 'grove-listening', name: 'The Grove Listening', rarity: 'mythic',  place: 'fog',
       needs: { awake: 16, visits: 2 },
       note: 'Come back to a grove you have already woken, and walk into the white. It knows you.' },
+
+    { id: 'slow-current',    name: 'Slow Current',       rarity: 'common',   place: 'wander',
+      note: 'It is going somewhere. It will arrive long after everything else has.' },
+    { id: 'held-breath',     name: 'Held Breath',        rarity: 'uncommon', place: 'grove',
+      note: 'Nobody has let this out yet. There has not been a good moment.' },
+    { id: 'the-unlit',       name: 'The Unlit Lantern',  rarity: 'rare',     place: 'rim',
+      needs: { visits: 3 },
+      note: 'The one at the end of the row. It has been saving itself.' },
+    { id: 'grove-keeping',   name: 'What the Grove Keeps', rarity: 'mythic', place: 'gate',
+      needs: { completion: 0.70 },
+      note: 'Left by the door, the way you leave something for a person you know is coming back.' },
   ],
 
   garden: [
@@ -166,6 +207,17 @@ export const DISCOVERIES = {
     { id: 'fourth-quiet',    name: 'The Fourth Quiet',   rarity: 'mythic',   place: 'monument',
       needs: { awake: 14, found: ['garden-keeper'] },
       note: 'The last still place, at the middle of the last garden.' },
+
+    { id: 'cold-thread',     name: 'Cold Thread',        rarity: 'common',   place: 'wander',
+      note: 'Runs from here to something enormous, a very long way off, that has not noticed.' },
+    { id: 'quiet-orbit',     name: 'Quiet Orbit',        rarity: 'uncommon', place: 'grove',
+      note: 'Going round something that is no longer there, out of habit and affection.' },
+    { id: 'the-long-night',  name: 'The Long Night',     rarity: 'rare',     place: 'fog',
+      needs: { visits: 3 },
+      note: 'Not a bad one. Just long, and you have to have stayed to be given it.' },
+    { id: 'garden-keeping',  name: 'What the Garden Keeps', rarity: 'mythic', place: 'rim',
+      needs: { worldsVisited: 4 },
+      note: 'It waited until you had been everywhere, so that it would be the last thing.' },
   ],
 };
 

@@ -314,13 +314,20 @@ const CONFIG = {
     noticeSeconds: 3.0,      // how long the companion stays interested
   },
 
-  /* The sanctuary's gallery: thirty-two places in four arcs, one arc per
-     world. A found memory burns in its place; an unfound one stays as a dim,
-     empty socket, which is the half of this that actually does the work — a
-     room with gaps in it is a room you want to fill. */
+  /* The sanctuary. Four things stand in it, and between them they answer what
+     have I found, how far have I come, where have I been, and how much of each
+     place is mine — see the head of sanctuary.js.
+
+     The gallery is forty-eight places in four arcs, one arc per world, laid in
+     two rows because a dozen in a single row is a picket fence. A found memory
+     burns in its place; an unfound one stays as a dim, empty socket, which is
+     the half of this that actually does the work — a room with gaps in it is a
+     room you want to fill. */
   sanctuary: {
-    radius: 26,              // how far the ring of memories stands from the middle
-    arc: 1.30,               // radians one world's eight spread across
+    radius: 26,              // how far the near row of memories stands out
+    rows: 2,                 // ...and how many rows a world's arc is laid in
+    rowGap: 4.6,             // how much further out the second row sits
+    arc: 1.42,               // radians one world's dozen spread across
     lift: 2.0,               // how high they float
     bob: 0.22,
     // These are the subject of the room, not scenery in it, so they are
@@ -332,6 +339,32 @@ const CONFIG = {
     glowPower: 0.42,
     emptySize: 0.30,         // an unfound place: small...
     emptyGlow: 0.26,         // ...and barely lit, but never absent
+
+    /* The cairn: one stone per memory kept, spiralling up around the monument
+       and tapering as it climbs. `max` is what a complete journey builds, so
+       it wants to stay in step with the total number of discoveries — past it
+       the tower simply stops growing rather than running off up the sky. */
+    cairn: {
+      max: 48, radius: 7.4, taper: 0.58, rise: 9.0, lift: 0.6,
+      stone: 0.86, glow: 0.30,
+    },
+
+    /* The four world marks: a standing stone per world, at the head of its
+       arc. `stub` is how much of one is showing before you have ever been
+       there — never nothing, because an absent mark is a missing world rather
+       than an unvisited one. */
+    marks: {
+      radius: 16.5, width: 1.05, height: 6.4, stub: 0.22,
+      rise: 1.6, lift: 0, glow: 0.55,
+    },
+
+    /* The constellations: `count` stars over each world's arc, of which the
+       fraction alight is that world's completion. Scaled by the tier's
+       particle budget and dropped entirely on the lowest one. */
+    stars: {
+      count: 9, radius: 34, height: 17, spread: 7.0, arc: 1.5,
+      size: 1.35, glow: 0.34, unlitGlow: 0.03,
+    },
   },
 
   /* Debug switches, all off in play. `freeTravel` opens every gate at once so
@@ -491,7 +524,7 @@ const CONFIG = {
       groundCells: 128,
       fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
       mengerDepth: 2, blockSegments: 3, cloudLayers: 3, kaleidoscope: true,
-      charSegments: 22, charShadow: true, companion: true,
+      charSegments: 22, charShadow: true, companion: true, sanctuaryExtras: true,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
@@ -500,7 +533,7 @@ const CONFIG = {
       groundCells: 96,
       fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
       mengerDepth: 2, blockSegments: 2, cloudLayers: 2, kaleidoscope: true,
-      charSegments: 16, charShadow: true, companion: true,
+      charSegments: 16, charShadow: true, companion: true, sanctuaryExtras: true,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
@@ -509,7 +542,7 @@ const CONFIG = {
       groundCells: 64,
       fractalDepth: 3, fractalInstances: 1400, structureScale: 0.6,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 1, kaleidoscope: false,
-      charSegments: 11, charShadow: false, companion: true,
+      charSegments: 11, charShadow: false, companion: true, sanctuaryExtras: true,
       bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.2,
     },
     /* The floor. Meant for a phone that would rather stay cool than look its
@@ -522,7 +555,7 @@ const CONFIG = {
       groundCells: 48,
       fractalDepth: 3, fractalInstances: 900, structureScale: 0.45,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 0, kaleidoscope: false,
-      charSegments: 9, charShadow: false, companion: false,
+      charSegments: 9, charShadow: false, companion: false, sanctuaryExtras: false,
       bloom: false, bloomScale: 0.30, msaa: 0, pixelRatio: 1.0,
     },
   },
@@ -815,7 +848,7 @@ function start() {
       content.setMasteryForm(archive.monumentForm(null, s.mastery));
 
       display = createSanctuaryDisplay({
-        CONFIG, scene, world, terrain, archive,
+        CONFIG, quality, scene, world, terrain, archive,
       });
       analytics.track(EVENTS.sanctuaryOpened, { found: s.discoveries });
     } else {

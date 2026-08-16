@@ -187,40 +187,65 @@ export const SANCTUARY = {
   name: 'your sanctuary',
   seed: 7,
   sanctuary: true,
+
+  /* The palette is the first thing that has to say "not another biome". The
+     four worlds are each built around one wild hue — turf, tide, deep water,
+     starlight — and this one is deliberately built around none of them: warm
+     unsaturated stone and a sky that has stopped changing its mind. Nothing
+     here is trying to be a landscape. It is a room with the roof off. */
   palette: {
-    skyTopA:    0x2e2a44,
-    skyTopB:    0x3a3050,
-    skyHorizon: 0x584458,
-    horizonGlow:0x36221e,
-    fog:        0x3b3246,
-    groundLow:  0x323848,
-    groundHigh: 0x6a6478,
-    fractalLow: 0x554a68,
-    fractalHigh:0xd8c0a8,
-    bloom:      0xffe0bc,
-    mote:       0xffd8b0,
-    firefly:    0xffdcc0,
-    haze:       0x60506a,
-    cloud:      0x6a5668,
+    skyTopA:    0x272338,   // an even, settled dusk — no drama overhead
+    skyTopB:    0x2f2942,
+    skyHorizon: 0x4a3e4a,   // and no sunset either; just warmth low down
+    horizonGlow:0x3a2620,
+    fog:        0x342c3c,
+    groundLow:  0x3a3442,   // stone in shadow...
+    groundHigh: 0x8c8092,   // ...and stone with the light on it. Pale, not lush.
+    fractalLow: 0x584c62,
+    fractalHigh:0xe0cbb2,   // the standing shapes read as pillars, not trees
+    bloom:      0xffe6c8,
+    mote:       0xffdcb8,
+    firefly:    0xffe0c8,
+    haze:       0x584a60,
+    cloud:      0x5e5064,
     cloakLow:   0x3d3550,
     cloakHigh:  0x8a7c9e,
     cloakRim:   0xd8bfc0,
     cloakGlow:  0xffd6a8,
     shadow:     0x2a2434,
   },
-  fog:    { density: 0.0105 },
-  // Deliberately small: you should be able to see the whole of it from the
-  // middle, which is what makes it feel like somewhere rather than another
-  // world. `ambient` is kept down with the rest of them — a home that is
-  // brighter than everywhere else stops being part of the same night.
-  ground: { radius: 76, amp: 2.6, freq: 0.020, plazaRadius: 22, rim: 4.5, drop: 20, ambient: 0.70 },
+
+  // Thinner than anywhere else, and on purpose: every other place hides its
+  // far side, and this one is legible all the way to the rim. You should be
+  // able to stand in the middle and see everything you have.
+  fog:    { density: 0.0072 },
+
+  /* Deliberately small, and laid rather than grown. `profile: 'plaza'` swaps
+     terrain.js over to a level court and a few shallow terraces — see
+     `plazaHeight` there. `amp` is a tenth of a wild world's, because what is
+     left of the fbm here is only there to stop the floor looking printed.
+     `ambient` stays down with the rest of them: a home that is brighter than
+     everywhere else stops being part of the same night. */
+  ground: {
+    profile: 'plaza',
+    radius: 76, amp: 0.42, freq: 0.020, plazaRadius: 22,
+    rim: 3.2, drop: 20, ambient: 0.74,
+    courtScale: 1.5,       // the level middle, as a multiple of plazaRadius
+    terraceWidth: 9.5,     // how far out one tread runs
+    terraceRise: 1.15,     // ...and how far up the riser at the end of it goes
+    terraceSoften: 0.42,   // how much of a tread is spent easing into the next
+  },
+
   species: 'tree',
-  structures: { count: 9, minHeight: 5.5, maxHeight: 9.5, radius: 0.55, sway: 0.07, spacing: 17 },
+  // Few, tall, evenly matched: a colonnade rather than a wood. `sway` is
+  // almost nothing, because the one thing this place is is still.
+  structures: { count: 12, minHeight: 7.0, maxHeight: 8.6, radius: 0.62, sway: 0.02, spacing: 19 },
   monument: { type: 'ring', size: 4.2 },
-  clouds: { height: 30, spacing: 12, size: 380, scale: 0.0068, drift: 0.6, amount: 0.18, color: 0x6a5668 },
+  // barely moving, and high enough to read as a ceiling rather than weather
+  clouds: { height: 40, spacing: 14, size: 380, scale: 0.0052, drift: 0.16, amount: 0.13, color: 0x5e5064 },
   water: null,
-  stars: 0.45,
-  fireflies: 1.1,
+  stars: 0.32,
+  fireflies: 0.55,
   audio: { root: 146.83, scale: [0, 4, 7, 12, 16], brightness: 520 },
 };
 

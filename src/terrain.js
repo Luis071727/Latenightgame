@@ -126,6 +126,10 @@ export function createTerrain({ CONFIG, quality, scene }) {
    * The world's surface at a point. Everything about a world's silhouette is
    * in here: the rolling middle, the flat plaza the monument stands on, the
    * rim, and the drop past it.
+   *
+   * Two profiles share the rim and the drop, because those are what make a
+   * place an island and every place here is one. What differs is the middle:
+   * `wild` rolls, `plaza` is laid.
    */
   function heightAt(x, z) {
     if (!G) return 0;
@@ -133,13 +137,7 @@ export function createTerrain({ CONFIG, quality, scene }) {
     const r = Math.hypot(x, z);
     const rn = r / G.radius;
 
-    // two scales of rolling, the broad one carrying most of the shape
-    let h = fbm.fbm2(x * G.freq * 0.37 + 11.3, z * G.freq * 0.37 - 7.1) * G.amp * 1.35
-          + fbm.fbm2(x * G.freq, z * G.freq) * G.amp * 0.55;
-
-    // a level place in the middle for the monument to stand on
-    const plaza = smoothstep(G.plazaRadius * 2.0, G.plazaRadius * 0.6, r);
-    h *= 1 - plaza * 0.88;
+    let h = G.profile === 'plaza' ? plazaHeight(x, z, r) : wildHeight(x, z, r);
 
     // the rim: walking outward becomes walking uphill, which turns the edge
     // of the world into a shape rather than a wall
@@ -150,6 +148,45 @@ export function createTerrain({ CONFIG, quality, scene }) {
     const edge = 1 - smoothstep(0.94, 1.14, rn);
     h = h * edge - (1 - edge) * G.drop;
 
+    return h;
+  }
+
+  /** the four worlds: land that grew */
+  function wildHeight(x, z, r) {
+    // two scales of rolling, the broad one carrying most of the shape
+    let h = fbm.fbm2(x * G.freq * 0.37 + 11.3, z * G.freq * 0.37 - 7.1) * G.amp * 1.35
+          + fbm.fbm2(x * G.freq, z * G.freq) * G.amp * 0.55;
+
+    // a level place in the middle for the monument to stand on
+    const plaza = smoothstep(G.plazaRadius * 2.0, G.plazaRadius * 0.6, r);
+    return h * (1 - plaza * 0.88);
+  }
+
+  /**
+   * The sanctuary: ground that was *laid* rather than ground that grew.
+   *
+   * A wide level court in the middle and then a few shallow terraces stepping
+   * outward — flat treads with softened risers, so the silhouette reads as
+   * something built and the walking stays completely even. The fbm is still
+   * here but turned right down and used only to keep the surface from being
+   * dead: a perfectly true floor looks like a bug, not like architecture.
+   *
+   * This is the whole difference between a home and a biome. Everywhere else
+   * the ground is weather; here it is a floor, and you can see the whole of it
+   * from the middle without anything rolling out of view.
+   */
+  function plazaHeight(x, z, r) {
+    const court = G.plazaRadius * G.courtScale;
+    // distance out past the court, in terraces
+    const t = Math.max(0, (r - court) / G.terraceWidth);
+    const step = Math.floor(t);
+    const into = t - step;
+    // ease the last of each tread up into the next riser
+    const risen = step + smoothstep(1 - G.terraceSoften, 1, into);
+    let h = risen * G.terraceRise;
+
+    // a whisper of unevenness, so it is laid stone rather than printed stone
+    h += fbm.fbm2(x * G.freq, z * G.freq) * G.amp;
     return h;
   }
 
