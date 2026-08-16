@@ -67,14 +67,45 @@ const CONFIG = {
   render: {
     exposure: 0.95,          // low on purpose — this is for a dark room
     maxPixelRatio: 2,        // mobile GPUs hate 3x
+
+    /* Adaptive exposure — the eye adjusting, not an effect.
+     *
+     * Walking into a clearing where everything is awake and a dozen motes are
+     * in tow used to clip the frame to white, and you could no longer see
+     * where you were going. This stops the aperture down a touch when that
+     * happens and opens it again when you leave.
+     *
+     * The brightness is estimated from the light list the ground shader is
+     * already given each frame rather than read back off the GPU. A readback
+     * — even of one pixel — stalls the pipeline, and a stutter in service of
+     * a slow, subtle grade is a bad trade on a mid phone. The estimate does
+     * not have to be right; it has to be smooth and in the right direction.
+     *
+     * `adaptFloor` is the important one. It is deliberately close to 1: this
+     * must never be something you can catch happening, and a scene that
+     * visibly gets darker as you approach it would be worse than the blowout.
+     */
+    adaptFrom: 2.2,          // scene load below this changes nothing at all
+    adaptStrength: 0.085,    // how hard it stops down past that
+    adaptFloor: 0.72,        // ...and the very furthest it may ever close
+    adaptDown: 0.55,         // damping rate closing; slow
+    adaptUp: 0.28,           // ...and slower still opening back up
   },
 
-  // Kept deliberately soft. Raising `strength` past ~0.9 starts to look like
-  // a lens effect rather than light.
+  /* Kept deliberately soft. Raising `strength` past ~0.9 starts to look like
+     a lens effect rather than light.
+
+     `threshold` is the readability knob. At the 0.62 it sat at, a halo card
+     overlapping an awakened tip cluster crossed it easily, so the bloom was
+     spreading every soft edge in the frame rather than the few things that are
+     genuinely bright — and a clearing full of woken structures clipped to
+     white. Up at 0.88 only the cores go, which is what bloom is for: the light
+     still blooms, the fog around it no longer does. `strength` is nudged up a
+     little to keep those cores looking the same as they did. */
   bloom: {
-    strength: 0.48,
+    strength: 0.54,
     radius: 0.62,
-    threshold: 0.62,
+    threshold: 0.88,
   },
 
   vignette: { amount: 0.85, radius: 0.80, softness: 0.58, dither: 1.0 },
@@ -126,7 +157,7 @@ const CONFIG = {
   character: {
     scale: 1.0,
     ambient: 0.72,           // how much of the sky the robe catches
-    glow: 1.15,              // brightness of the light at the chest
+    glow: 1.00,              // brightness of the light at the chest
     glowSize: 0.30,
     bob: 0.042,              // vertical float, in units
     bobSpeed: 1.15,          // ...and its rate, per second
@@ -216,7 +247,13 @@ const CONFIG = {
   /* The ground shader. `lights` is a shader constant: changing it recompiles. */
   ground: {
     lights: 6,               // nearest motes that light the ground
-    lightPower: 3.2,
+    lightPower: 2.5,
+    /* What all six of them together may add up to, at most. The sum is soft-
+       clamped rather than cut — see the fragment shader in terrain.js — so a
+       quiet world is completely unaffected and a blazing one bends over toward
+       this instead of running away to white. This is what guarantees the
+       ground under the wanderer stays readable however much is awake. */
+    lightClamp: 1.35,
     grain: 0.028,            // per-pixel surface grain, as a normal slope
     detailFade: 0.045,       // how quickly the grain fades with distance
   },
@@ -239,10 +276,19 @@ const CONFIG = {
      have to arrive for the monument to be full. */
   motes: {
     size: 0.44,
-    glow: 1.20,              // emissive multiplier; much past ~1.6 clips to white
+    glow: 1.00,              // emissive multiplier; much past ~1.6 clips to white
     glowRadius: 3.0,         // halo card size, relative to the mote
-    glowPower: 0.32,
-    gatheredGlow: 1.55,      // a mote brightens once it is following you
+    glowPower: 0.26,
+    gatheredGlow: 1.35,      // a mote brightens once it is following you
+
+    /* Crowding. A dozen gathered motes orbit the wanderer in a ring, and a
+       dozen overlapping additive cards centred on the figure you are steering
+       is the single worst blowout in the game. `crowdFree` of them cost
+       nothing — the ordinary handful must look exactly as it always did — and
+       past that the total eases off instead of stacking. */
+    crowdRadius: 9,          // how near counts as being in the same glare
+    crowdFree: 4,            // this many cost nothing at all...
+    crowdSoften: 0.085,      // ...and each one past it takes a little off
     bob: 0.55,               // how far a free mote drifts up and down
     drag: 0.50,              // per-second velocity decay back to stillness
 
@@ -272,7 +318,7 @@ const CONFIG = {
   awaken: {
     radius: 8.0,             // how close is close enough
     bloomSeconds: 5.5,       // how long it takes to come fully alight
-    lightPower: 2.4,         // what an awake structure does to the ground
+    lightPower: 1.7,         // what an awake structure does to the ground
     lightRange: 32,
     gateAt: 0.18,            // fraction awake before the gate is fully open
   },
@@ -310,7 +356,7 @@ const CONFIG = {
     takeRadius: 2.6,         // walk this close and it comes to you
     takeSeconds: 1.15,       // how long the taking itself lasts
     glowRadius: 3.4,         // halo size, relative to the body
-    glowPower: 0.40,
+    glowPower: 0.34,
     noticeSeconds: 3.0,      // how long the companion stays interested
   },
 
@@ -336,9 +382,13 @@ const CONFIG = {
     rarityPush: 4.2,         // how much further out a rare thing stands...
     rarityRise: 1.5,         // ...and how much higher
     glowRadius: 3.8,
-    glowPower: 0.42,
+    glowPower: 0.34,
     emptySize: 0.30,         // an unfound place: small...
     emptyGlow: 0.26,         // ...and barely lit, but never absent
+    // ...and the same crowding relief the motes get, because a finished
+    // world's arc is a dozen lit haloes standing side by side
+    crowdFree: 10,
+    crowdSoften: 0.016,
 
     /* The cairn: one stone per memory kept, spiralling up around the monument
        and tapering as it climbs. `max` is what a complete journey builds, so
@@ -436,7 +486,7 @@ const CONFIG = {
 
   wind: { strength: 0.10 },
 
-  fireflies: { count: 14, brightness: 1.5, range: 46 },
+  fireflies: { count: 14, brightness: 1.25, range: 46 },
 
   haze: { radius: 110, height: 7.5, amount: 0.30, centerY: 1.5 },
 
@@ -1163,6 +1213,7 @@ function start() {
   let time = 0;
   let ambientAt = 2;
   let moodAt = 0;
+  let exposureScale = 1;      // the adaptive aperture; 1 is wide open
 
   // a rolling frame rate, for tuning from the console. Smoothed hard enough
   // that a number read off it by eye means something.
@@ -1328,6 +1379,28 @@ function start() {
     lights.sort(byDistance);
     if (lights.length > CONFIG.ground.lights) lights.length = CONFIG.ground.lights;
     terrain.setLights(lights);
+
+    /* ── the eye adjusting ─────────────────────────────────────────────
+     * `lights` is already the brightest few things near the camera, sorted,
+     * which makes it a free and quite good estimate of how much light is
+     * about to be in the frame. Near things count for more than far ones, and
+     * an open gate is added on top because a beacon is a lot of light that
+     * carries no ground lights of its own.
+     */
+    const R = CONFIG.render;
+    let load = gate.open * 0.9;
+    for (const l of lights) load += (l.vis * l.glow) / (1 + l.dist2 * 0.012);
+
+    const want = Math.max(
+      R.adaptFloor,
+      1 / (1 + R.adaptStrength * Math.max(0, load - R.adaptFrom))
+    );
+    // closing is quicker than opening, the way an eye is: walking into light
+    // should not blind you, and walking back out should take a moment to
+    // recover from rather than snapping bright
+    exposureScale = THREE.MathUtils.damp(
+      exposureScale, want, want < exposureScale ? R.adaptDown : R.adaptUp, dt);
+    ui.setExposureScale(exposureScale);
 
     sky.update(dt, ctx);
     if (water) water.update(dt, ctx);

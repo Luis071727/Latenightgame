@@ -484,6 +484,14 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
       if (!stoneWritten) writeStones();
       if (!starsWritten) writeStars();
 
+      /* The gallery is the one place in the game where dozens of lit things
+         stand close together *by design*, so it is also where additive haloes
+         stack worst — a finished world's arc is a wall of overlapping cards.
+         Eased down by how many of this world's memories are actually burning,
+         which keeps a full arc bright without letting it turn into a bar of
+         white across the horizon. */
+      const crowd = 1 / (1 + S.crowdSoften * Math.max(0, this.found - S.crowdFree));
+
       for (let i = 0; i < slots.length; i++) {
         const s = slots[i];
         const breathe = 0.85 + 0.15 * Math.sin(t * 0.5 + s.phase);
@@ -510,7 +518,7 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
         dummy.updateMatrix();
         glowMesh.setMatrixAt(i, dummy.matrix);
 
-        gPower.array[i] = s.found ? power * S.glowPower : 0;
+        gPower.array[i] = s.found ? power * S.glowPower * crowd : 0;
         gTint.array[i * 3] = halo.r;
         gTint.array[i * 3 + 1] = halo.g;
         gTint.array[i * 3 + 2] = halo.b;

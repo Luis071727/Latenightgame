@@ -45,6 +45,7 @@ export function createTerrain({ CONFIG, quality, scene }) {
     uLightPos:  { value: Array.from({ length: NUM_LIGHTS }, () => new THREE.Vector3()) },
     uLightColor:{ value: Array.from({ length: NUM_LIGHTS }, () => new THREE.Color(0, 0, 0)) },
     uLightPower:{ value: new Float32Array(NUM_LIGHTS) },
+    uLightClamp:{ value: CONFIG.ground.lightClamp },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -69,6 +70,7 @@ export function createTerrain({ CONFIG, quality, scene }) {
       uniform vec3 uLightPos[NUM_LIGHTS];
       uniform vec3 uLightColor[NUM_LIGHTS];
       uniform float uLightPower[NUM_LIGHTS];
+      uniform float uLightClamp;
 
       varying vec3 vWorld;
       varying vec3 vNormal;
@@ -105,15 +107,29 @@ export function createTerrain({ CONFIG, quality, scene }) {
         vec3 col = albedo * uAmbient * (0.42 + 0.9 * (0.5 + 0.5 * n.y));
         col += uSky * (0.5 + 0.5 * n.y) * 0.22;
 
-        // whatever soft lights are nearby — motes, and structures coming awake
+        /* Whatever soft lights are nearby — motes, and structures coming
+           awake. Gathered into one sum and then soft-clamped rather than added
+           straight onto the surface: six lights each contributing a perfectly
+           reasonable amount still add up to six times a reasonable amount, and
+           the place that happens is a clearing where everything is awake and a
+           handful of motes are following you, which is to say the exact ground
+           the player most needs to be able to read.
+
+           x/(1+x/c) is the whole trick. It is linear while the light is dim,
+           so nothing about a quiet world changes at all, and it bends over
+           toward c as the light piles up — so a crowded, blazing patch of
+           ground gets brighter, but never white, and the wanderer's own shadow
+           and the slope under their feet stay legible. */
+        vec3 gathered = vec3(0.0);
         for (int i = 0; i < NUM_LIGHTS; i++) {
           if (uLightPower[i] <= 0.0) continue;
           vec3 toLight = uLightPos[i] - vWorld;
           float d = length(toLight);
           vec3 L = toLight / max(d, 0.001);
           float atten = uLightPower[i] / (1.0 + d * d * 0.12);
-          col += albedo * uLightColor[i] * max(dot(n, L), 0.0) * atten;
+          gathered += uLightColor[i] * max(dot(n, L), 0.0) * atten;
         }
+        col += albedo * (gathered / (1.0 + gathered / uLightClamp));
 
         float fog = 1.0 - exp(-pow(vDepth * uFogDensity, 2.0));
         gl_FragColor = vec4(mix(col, uFogColor, fog), 1.0);

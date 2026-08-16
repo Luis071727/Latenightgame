@@ -284,11 +284,32 @@ export function createMotes({ CONFIG, quality, scene }) {
       s.vis = s.alpha;
     }
 
+    /* ── how crowded it is right here ──────────────────────────────────
+     * Additive halo cards are order-independent and cheap, and they have one
+     * failure mode: N of them overlapping contribute N times their peak with
+     * nothing to stop it, so a dozen gathered motes trailing in a ring around
+     * the wanderer is a solid white disc centred on the thing you are steering.
+     *
+     * So the light each one is allowed to give up is eased down as more of
+     * them gather near the player. `crowdFree` of them cost nothing at all —
+     * a handful of motes is the ordinary case and must look exactly as it
+     * always did — and past that the total flattens out instead of stacking.
+     * Measured against the wanderer rather than the camera because the camera
+     * trails them, so this is the middle of the frame either way.
+     */
+    let near = 0;
+    const crowd2 = M.crowdRadius * M.crowdRadius;
+    for (const s of active) {
+      const dx = s.x - who.x, dz = s.z - who.z;
+      if (dx * dx + dz * dz < crowd2) near++;
+    }
+    const crowdScale = 1 / (1 + M.crowdSoften * Math.max(0, near - M.crowdFree));
+
     /* ── pack the live ones into the front of the instance buffers ───── */
     for (let i = 0; i < active.length; i++) {
       const s = active[i];
       const flicker = 0.88 + 0.12 * Math.sin(s.life * 1.9 + s.phase);
-      const gathered = s.state === FREE ? 1 : M.gatheredGlow;
+      const gathered = (s.state === FREE ? 1 : M.gatheredGlow) * crowdScale;
 
       dummy.position.set(s.x, s.y, s.z);
       dummy.rotation.set(s.phase * 0.5, s.phase * 0.8, 0);
