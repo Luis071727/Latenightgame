@@ -2,7 +2,7 @@ import {
   DISCOVERIES, COLLECTIONS, MASTERY_REWARDS, TITLES, COSMETICS,
   discovery, discoveriesOf, defaultCosmetic, cosmetic, title,
   monumentForm, IS_RARE, TOTAL_DISCOVERIES,
-  variantsOf, defaultVariant,
+  variantsOf, defaultVariant, earnedBy,
 } from './discoveries.js';
 import {
   loadArchive, loadLegacyJourney, saveArchive, eraseArchive,
@@ -254,23 +254,75 @@ export function createArchive({ worlds, monumentTarget }) {
     }
   }
 
+  /**
+   * How far along a condition is, against a summary.
+   *
+   * One function, used for two different things: deciding whether to grant
+   * something, and telling the player how close they are to it. They cannot
+   * disagree about what "close" means because there is only one of them.
+   *
+   * Returns null for conditions this does not evaluate — a mastery threshold
+   * or a set, both of which are granted elsewhere and are looked up as
+   * milestones rather than recomputed.
+   *
+   * @returns {{have:number, need:number, ratio:number, done:boolean}|null}
+   */
+  function progressOf(cond, s) {
+    if (!cond) return null;
+    const at = (have, need) => ({
+      have, need, ratio: need > 0 ? Math.min(1, have / need) : 1, done: have + 1e-6 >= need,
+    });
+    if (cond.discoveries !== undefined) return at(s.discoveries, cond.discoveries);
+    if (cond.rare !== undefined) return at(s.rare, cond.rare);
+    if (cond.mythic !== undefined) return at(s.mythic, cond.mythic);
+    if (cond.collections !== undefined) return at(s.collections, cond.collections);
+    if (cond.worldsVisited !== undefined) return at(s.worldsVisited, cond.worldsVisited);
+    if (cond.completion !== undefined) return at(s.completion, cond.completion);
+    if (cond.mastery) return at(mastery(cond.mastery.world).value, cond.mastery.at);
+    if (cond.set) {
+      const c = COLLECTIONS.find((x) => x.id === cond.set);
+      if (!c) return null;
+      const w = worldState(c.world);
+      return at(c.members.filter((id) => w.found.includes(id)).length, c.members.length);
+    }
+    return null;
+  }
+
   /** ...and every title whose condition is a fact about the whole journey */
   function checkTitles() {
     const s = summary();
     for (const t of TITLES) {
       if (!t.earn || data.unlocks.title.includes(t.id)) continue;
-      const e = t.earn;
-      const got = (e.discoveries === undefined || s.discoveries >= e.discoveries)
-               && (e.rare === undefined || s.rare >= e.rare)
-               && (e.collections === undefined || s.collections >= e.collections)
-               && (e.worldsVisited === undefined || s.worldsVisited >= e.worldsVisited);
-      if (got) unlock('title', t.id, t.note);
+      const p = progressOf(t.earn, s);
+      if (p && p.done) unlock('title', t.id, t.note);
     }
+  }
+
+  /**
+   * Grant anything whose condition is already true but was never recorded.
+   *
+   * Mastery rewards and set rewards are granted at the moment a threshold is
+   * *crossed*, which is right until something moves the threshold — adding a
+   * reward to a world, or changing what a set contains. A player who was
+   * already past the new line would then never be given the thing, and, now
+   * that the Wanderer tab draws progress, would sit looking at a locked badge
+   * reading "29% of 25%" with no way to ever collect it.
+   *
+   * So the state is reconciled once at load. It runs before main has installed
+   * any listeners, which is deliberate and is the whole reason it is called
+   * from here rather than from `arrive`: catching up on six thresholds at once
+   * should be a save file quietly becoming correct, not six ceremonies in a
+   * row for things the player did weeks ago.
+   */
+  function reconcile() {
+    for (const key of worldKeys) checkMastery(key);
+    checkCollections();
+    checkTitles();
   }
 
   /** everything the profile and the leaderboards are computed from */
   function summary() {
-    let discoveries = 0, rare = 0, worldsVisited = 0, masterySum = 0;
+    let discoveries = 0, rare = 0, mythic = 0, worldsVisited = 0, masterySum = 0;
     for (const key of worldKeys) {
       const w = data.worlds[key];
       if (w && w.visits > 0) worldsVisited++;
@@ -278,7 +330,9 @@ export function createArchive({ worlds, monumentTarget }) {
         discoveries += w.found.length;
         for (const id of w.found) {
           const d = discovery(id);
-          if (d && IS_RARE(d.rarity)) rare++;
+          if (!d) continue;
+          if (IS_RARE(d.rarity)) rare++;
+          if (d.rarity === 'mythic') mythic++;
         }
       }
       masterySum += mastery(key).value;
@@ -291,6 +345,7 @@ export function createArchive({ worlds, monumentTarget }) {
       ofDiscoveries: TOTAL_DISCOVERIES,
       completion: TOTAL_DISCOVERIES ? discoveries / TOTAL_DISCOVERIES : 0,
       rare,
+      mythic,
       collections,
       ofCollections: COLLECTIONS.length,
       worldsVisited,
@@ -301,6 +356,10 @@ export function createArchive({ worlds, monumentTarget }) {
       title: data.equipped.title,
     };
   }
+
+  // ...and bring anything already true but never written down up to date,
+  // while nobody is listening
+  reconcile();
 
   return {
     get data() { return data; },
@@ -394,6 +453,33 @@ export function createArchive({ worlds, monumentTarget }) {
       const c = type === 'title' ? title(id) : cosmetic(type, id);
       if (c?.default) return true;
       return (data.unlocks[type] || []).includes(id);
+    },
+
+    /**
+     * Everything about a title or cosmetic that the Wanderer tab needs to draw
+     * it as a badge: what it is, whether it is yours, what earned it, and — if
+     * the condition is something countable — how far along you are.
+     *
+     * Progress is only offered for things not yet owned. Telling someone they
+     * are 100% of the way to a thing they are already wearing is noise.
+     */
+    badge(type, id) {
+      const c = type === 'title' ? title(id) : cosmetic(type, id);
+      if (!c) return null;
+      const owned = this.owns(type, id);
+      const cond = c.default ? null : earnedBy(type, id);
+      return {
+        id, type,
+        name: c.name,
+        note: c.note || '',
+        emblem: c.emblem || 'seed',
+        weight: c.weight || 'common',
+        isDefault: !!c.default,
+        owned,
+        worn: data.equipped[type] === id,
+        condition: cond,
+        progress: owned || !cond ? null : progressOf(cond, summary()),
+      };
     },
 
     /** everything of a kind the player may currently choose between */

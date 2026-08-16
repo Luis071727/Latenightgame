@@ -267,31 +267,31 @@ export const COLLECTIONS = [
  */
 export const COSMETICS = {
   cloak: [
-    { id: 'wanderer', name: 'Wanderer', default: true,
+    { id: 'wanderer', name: 'Wanderer', default: true, emblem: 'seed', weight: 'common',
       note: 'What you set out in. It takes the colour of wherever you are.',
       colors: null },
-    { id: 'dawn', name: 'Dawn', note: 'The meadow, kept.',
+    { id: 'dawn', name: 'Dawn', note: 'The meadow, kept.', emblem: 'petal', weight: 'uncommon',
       colors: { cloakLow: 0x4a3450, cloakHigh: 0xc98f88, cloakRim: 0xffd2b4, cloakGlow: 0xffd6a8 } },
-    { id: 'lantern', name: 'Lantern', note: 'Lit from somewhere under the surface.',
+    { id: 'lantern', name: 'Lantern', note: 'Lit from somewhere under the surface.', emblem: 'bell', weight: 'uncommon',
       colors: { cloakLow: 0x1e3a40, cloakHigh: 0x5aa192, cloakRim: 0xa8ffe4, cloakGlow: 0xa8ffe4 } },
-    { id: 'tideline', name: 'Tideline', note: 'The colour the harbour goes just before it is dark.',
+    { id: 'tideline', name: 'Tideline', note: 'The colour the harbour goes just before it is dark.', emblem: 'shell', weight: 'rare',
       colors: { cloakLow: 0x2a2c50, cloakHigh: 0x6f7fb8, cloakRim: 0xc9d8ff, cloakGlow: 0xbfd0ff } },
-    { id: 'nightfall', name: 'Nightfall', note: 'Worn by someone who has been to the end and come back.',
+    { id: 'nightfall', name: 'Nightfall', note: 'Worn by someone who has been to the end and come back.', emblem: 'star', weight: 'rare',
       colors: { cloakLow: 0x1a1730, cloakHigh: 0x4e4478, cloakRim: 0xe8d4ff, cloakGlow: 0xe8d4ff } },
-    { id: 'firstlight', name: 'First Light', note: 'For the one who found everything.',
+    { id: 'firstlight', name: 'First Light', note: 'For the one who found everything.', emblem: 'flower', weight: 'dream',
       colors: { cloakLow: 0x3e3450, cloakHigh: 0xd8c090, cloakRim: 0xfff0d0, cloakGlow: 0xffe2b0 } },
   ],
 
   companion: [
-    { id: 'wisp', name: 'Wisp', default: true,
+    { id: 'wisp', name: 'Wisp', default: true, emblem: 'seed', weight: 'common',
       note: 'The small light that has always been with you.', color: null },
-    { id: 'tideglass', name: 'Tideglass', note: 'It picked you up somewhere near the water.',
+    { id: 'tideglass', name: 'Tideglass', note: 'It picked you up somewhere near the water.', emblem: 'shell', weight: 'uncommon',
       color: 0xbfd0ff },
-    { id: 'emberlight', name: 'Emberlight', note: 'Warm, and slightly too interested in everything.',
+    { id: 'emberlight', name: 'Emberlight', note: 'Warm, and slightly too interested in everything.', emblem: 'flower', weight: 'uncommon',
       color: 0xffc08a },
-    { id: 'mothlight', name: 'Mothlight', note: 'It found the grove first and waited for you there.',
+    { id: 'mothlight', name: 'Mothlight', note: 'It found the grove first and waited for you there.', emblem: 'leaf', weight: 'rare',
       color: 0xa8ffe4 },
-    { id: 'starling', name: 'Starling', note: 'Very old. Very small.',
+    { id: 'starling', name: 'Starling', note: 'Very old. Very small.', emblem: 'star', weight: 'dream',
       color: 0xe8d4ff },
   ],
 };
@@ -489,39 +489,134 @@ export function applyVariant(world, id) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * What a wanderer can be called. `earn` is checked against the archive's own
- * summary, so a title is always a statement about something the player did
- * rather than a thing they bought.
+ * What a wanderer can be called.
+ *
+ * `earn` is checked against the archive's own summary, so a title is always a
+ * statement about something the player did rather than a thing they bought.
+ * The ones without an `earn` here are granted by passing a mastery threshold —
+ * see MASTERY_REWARDS — and their condition is *derived* from that table by
+ * `earnedBy` below rather than written out twice, so the line the Wanderer tab
+ * shows and the rule that actually grants the thing cannot drift apart.
+ *
+ * `emblem` is which form from the shape vocabulary stands for it, and `weight`
+ * is how much of an achievement it is, on the same ladder rarity uses — both
+ * so that a title can be presented as a badge rather than as a word.
  */
 export const TITLES = [
-  { id: 'wanderer', name: 'The Wanderer', default: true,
+  { id: 'wanderer', name: 'The Wanderer', default: true, emblem: 'seed', weight: 'common',
     note: 'Everyone starts here.' },
-  { id: 'first-wanderer', name: 'First Wanderer',
+  { id: 'first-wanderer', name: 'First Wanderer', emblem: 'petal', weight: 'common',
     note: 'Found your first memory.', earn: { discoveries: 1 } },
-  { id: 'meadow-listener', name: 'Meadow Listener',
+  { id: 'meadow-listener', name: 'Meadow Listener', emblem: 'petal', weight: 'uncommon',
     note: 'A quarter of the meadow known.' },
-  { id: 'tide-dreamer', name: 'Tide Dreamer',
+  { id: 'tide-dreamer', name: 'Tide Dreamer', emblem: 'shell', weight: 'uncommon',
     note: 'A quarter of the harbour known.' },
-  { id: 'lantern-keeper', name: 'Lantern Keeper',
+  { id: 'lantern-keeper', name: 'Lantern Keeper', emblem: 'bell', weight: 'uncommon',
     note: 'A quarter of the grove known.' },
-  { id: 'star-cartographer', name: 'Star Cartographer',
+  { id: 'star-cartographer', name: 'Star Cartographer', emblem: 'star', weight: 'uncommon',
     note: 'A quarter of the garden known.' },
-  { id: 'keeper-small-lights', name: 'Keeper of Small Lights',
+  { id: 'keeper-small-lights', name: 'Keeper of Small Lights', emblem: 'flower', weight: 'dream',
     note: 'The meadow, entirely.' },
-  { id: 'collector-quiet-things', name: 'Collector of Quiet Things',
+  { id: 'collector-quiet-things', name: 'Collector of Quiet Things', emblem: 'leaf', weight: 'dream',
     note: 'The grove, entirely.' },
-  { id: 'the-unhurried', name: 'The Unhurried',
+  { id: 'the-unhurried', name: 'The Unhurried', emblem: 'crown', weight: 'dream',
     note: 'The garden, entirely. There was never any rush.' },
-  { id: 'keeper-fourth-gate', name: 'Keeper of the Fourth Gate',
+  { id: 'keeper-fourth-gate', name: 'Keeper of the Fourth Gate', emblem: 'crown', weight: 'rare',
     note: 'Walked through every gate there is.', earn: { worldsVisited: 4 } },
-  { id: 'dream-architect', name: 'Dream Architect',
+  { id: 'dream-architect', name: 'Dream Architect', emblem: 'flower', weight: 'dream',
     note: 'Every set completed.', earn: { collections: 4 } },
-  { id: 'finder-of-rare-things', name: 'Finder of Rare Things',
+  { id: 'finder-of-rare-things', name: 'Finder of Rare Things', emblem: 'star', weight: 'rare',
     note: 'Eight rare discoveries or better.', earn: { rare: 8 } },
+
+  /* The two at the far end. One is the first time the game hands over
+     something it called mythic; the other is very nearly all of it, and is
+     meant to be the last thing anyone earns. */
+  { id: 'keeper-of-the-strange', name: 'Keeper of the Strange', emblem: 'shell', weight: 'dream',
+    note: 'Held something mythic.', earn: { mythic: 1 } },
+  { id: 'the-long-way-round', name: 'The Long Way Round', emblem: 'crown', weight: 'mythic',
+    note: 'Nine tenths of everything there is.', earn: { completion: 0.9 } },
 ];
 
 export function title(id) {
   return TITLES.find((t) => t.id === id) || null;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   what earned a thing
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Every title and cosmetic, mapped to the condition that grants it.
+ *
+ * Built rather than authored. Three tables already decide who gets what —
+ * `TITLES[].earn`, `MASTERY_REWARDS` and `COLLECTIONS[].reward` — and writing
+ * the conditions out a fourth time so the Wanderer tab could display them
+ * would have meant two sources of truth for the same fact, which stay in
+ * agreement exactly until the first time somebody edits one of them. So the
+ * map is derived from those three at load, and a line on a badge is the same
+ * rule that actually granted the badge.
+ */
+const EARNED = new Map();
+const earnKey = (type, id) => `${type}:${id}`;
+
+for (const t of TITLES) {
+  if (t.earn) EARNED.set(earnKey('title', t.id), t.earn);
+}
+for (const [world, rewards] of Object.entries(MASTERY_REWARDS)) {
+  for (const r of rewards) {
+    // an explicit earn wins: it is the one that checkTitles actually tests
+    if (!EARNED.has(earnKey(r.type, r.id))) {
+      EARNED.set(earnKey(r.type, r.id), { mastery: { world, at: r.at } });
+    }
+  }
+}
+for (const c of COLLECTIONS) {
+  const k = earnKey(c.reward.type, c.reward.id);
+  if (!EARNED.has(k)) EARNED.set(k, { set: c.id, world: c.world });
+}
+
+/** the condition that grants this title or cosmetic, or null for a default */
+export function earnedBy(type, id) {
+  return EARNED.get(earnKey(type, id)) || null;
+}
+
+/**
+ * The condition, as a line someone would actually want to read.
+ *
+ * @param nameOf resolves a world key to its display name; the world names live
+ *   in worlds.js and this file deliberately does not know about that one.
+ */
+export function describeEarn(cond, nameOf = (k) => k) {
+  if (!cond) return '';
+  if (cond.mastery) {
+    const w = nameOf(cond.mastery.world);
+    return cond.mastery.at >= 1
+      ? `Know ${w} entirely.`
+      : `Know ${w} ${Math.round(cond.mastery.at * 100)}% of the way.`;
+  }
+  if (cond.set) {
+    const c = COLLECTIONS.find((x) => x.id === cond.set);
+    return `Complete ${c ? c.name : 'the set'}, in ${nameOf(cond.world)}.`;
+  }
+  if (cond.discoveries !== undefined) {
+    return cond.discoveries === 1
+      ? 'Find your first memory.'
+      : `Keep ${cond.discoveries} memories.`;
+  }
+  if (cond.rare !== undefined) return `Find ${cond.rare} rare memories or better.`;
+  if (cond.mythic !== undefined) {
+    return cond.mythic === 1 ? 'Find something mythic.' : `Find ${cond.mythic} mythic memories.`;
+  }
+  if (cond.collections !== undefined) {
+    return cond.collections >= COLLECTIONS.length
+      ? 'Complete every set there is.'
+      : `Complete ${cond.collections} sets.`;
+  }
+  if (cond.worldsVisited !== undefined) return `Walk in ${cond.worldsVisited} worlds.`;
+  if (cond.completion !== undefined) {
+    return `Find ${Math.round(cond.completion * 100)}% of everything there is.`;
+  }
+  return '';
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -25,7 +25,9 @@ import { createSanctuaryDisplay } from './sanctuary.js';
 import { createStory, BEATS as STORY_BEATS } from './story.js';
 import { createAnalytics, EVENTS } from './analytics.js';
 import { createProfileService, createLeaderboardService } from './leaderboard.js';
-import { RARITY, title, cosmetic, applyVariant } from './discoveries.js';
+import {
+  RARITY, title, cosmetic, applyVariant, earnedBy, describeEarn,
+} from './discoveries.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIG — everything worth tweaking lives here.
@@ -585,6 +587,13 @@ const CONFIG = {
     hint2DelayMs: 9000,      // when the "or tap ahead of yourself" nudge appears
     hint2VisibleMs: 9000,
     memoryVisibleMs: 7200,   // how long a found thing's name and line stay up
+
+    /* Being given a title or a cosmetic. Longer than a found memory on
+       purpose — it is the larger event of the two — and with a gap after it
+       wide enough for the two-and-a-half second fade to finish before
+       anything else is allowed on screen. */
+    riteVisibleMs: 8500,
+    riteGapMs: 2800,
     worldNameMs: 6800,       // ...and the name of a place you have arrived in
     sleepAfterSeconds: 600,  // ~10 minutes of stillness, then it dims itself
     sleepFadeSeconds: 50,
@@ -855,14 +864,36 @@ function start() {
     analytics.track(EVENTS.collectionCompleted, { id: c.id, world: c.world });
   };
   archive.onUnlock = ({ type, id }) => {
+    analytics.track(EVENTS.cosmeticUnlocked, { type, id });
+
+    /* The monument changing shape is not a thing you wear and has nothing to
+       show as a badge — it is told in the world, by the monument. */
+    if (type === 'monument') {
+      const c = cosmetic(type, id);
+      if (c) ui.showMemory('the monument answers', c.name, c.note || '', 'dream');
+      return;
+    }
+
     const c = type === 'title' ? title(id) : cosmetic(type, id);
     if (!c) return;
-    const kind = type === 'title' ? 'new title'
-      : type === 'monument' ? 'the monument answers'
-      : `new ${type}`;
-    ui.showMemory(kind, c.name, c.note || '', 'dream');
-    analytics.track(EVENTS.cosmeticUnlocked, { type, id });
+
+    /* The ceremony. The line under the name is the *condition*, resolved from
+       the same table that granted the thing — so what it says earned it is
+       what earned it, and cannot drift into being decorative. */
+    const cond = earnedBy(type, id);
+    ui.showRite({
+      kind: type === 'title' ? 'a name you have earned' : `a ${type} you have earned`,
+      name: c.name,
+      why: describeEarn(cond, worldName) || c.note || '',
+      emblem: c.emblem,
+      weight: c.weight,
+    });
   };
+
+  /** a world key as the player knows it, for the lines under an honour */
+  function worldName(key) {
+    return WORLDS.find((w) => w.key === key)?.name || key;
+  }
   archive.onMastery = ({ world: key, at }) => {
     analytics.track(EVENTS.masteryReached, { world: key, at });
     if (at < 1) return;    // the quarters are told by what they unlock

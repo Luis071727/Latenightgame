@@ -52,12 +52,23 @@ const EXAMPLES = [
 
 export function createProfileService({ archive }) {
   return {
-    /** the small public shape of this wanderer */
+    /**
+     * The small public shape of this wanderer.
+     *
+     * The title is resolved rather than handed over as a bare id: it is the
+     * one thing on a profile that was *earned*, and the screen that compares
+     * journeys ought to be able to show it as the badge it is rather than as
+     * a slug nobody outside this file can read.
+     */
     async me() {
       const s = archive.summary();
+      const worn = archive.badge('title', archive.equipped('title'));
       return {
         name: archive.data.profile.name || 'a quiet wanderer',
-        title: archive.equipped('title'),
+        title: worn ? {
+          id: worn.id, name: worn.name, emblem: worn.emblem,
+          weight: worn.weight, note: worn.note,
+        } : null,
         cloak: archive.equipped('cloak'),
         companion: archive.equipped('companion'),
         summary: s,
