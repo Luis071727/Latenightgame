@@ -79,6 +79,61 @@ entire, the four worlds, every memory there is, the wanderer themself, and a
 quiet **beside** view for comparing journeys. Nothing there is ranked, nothing
 expires, and nothing is lost by staying away.
 
+### Titles, cloaks and companions — and what earns them
+
+Everything a wanderer can be called or wear is a **badge**: its own emblem from
+the shape vocabulary, a weight on the same ladder rarity uses, and the exact
+condition that earned it. In the **wanderer** tab an earned badge is lit and can
+be worn; an unearned one is dimmed and shows the same condition written as an
+invitation, with a meter and how far along you are wherever the condition is
+something countable. Equipping is choosing which honour to wear.
+
+Earning one plays a **soft reveal**: the emblem and the name fading up in the
+middle of the frame with a line naming what earned it. No button, nothing to
+dismiss, and nothing pauses — and if two land at once they are given one after
+the other rather than on top of each other.
+
+| title | weight | earned by |
+|---|---|---|
+| The Wanderer | common | where everyone starts |
+| First Wanderer | common | find your first memory |
+| Meadow Listener | uncommon | know the waking meadow 25% of the way |
+| Tide Dreamer | uncommon | know the quiet harbour 25% of the way |
+| Lantern Keeper | uncommon | know the lantern grove 25% of the way |
+| Star Cartographer | uncommon | know the star garden 25% of the way |
+| Keeper of the Fourth Gate | rare | walk in all four worlds |
+| Finder of Rare Things | rare | find 8 rare memories or better |
+| Keeper of Small Lights | dream | know the waking meadow entirely |
+| Collector of Quiet Things | dream | know the lantern grove entirely |
+| The Unhurried | dream | know the star garden entirely |
+| Dream Architect | dream | complete every set there is |
+| Keeper of the Strange | dream | find something mythic |
+| The Long Way Round | mythic | find 90% of everything there is |
+
+Cloaks and companions are earned the same way — by completing a world's set, or
+by passing a mastery threshold in it:
+
+| worn thing | earned by |
+|---|---|
+| Dawn *(cloak)* | complete **First Light**, in the meadow |
+| Lantern *(cloak)* | complete **Low Light**, in the grove |
+| First Light *(cloak)* | know the meadow half the way |
+| Tideline *(cloak)* | know the harbour half the way |
+| Nightfall *(cloak)* | know the garden half the way |
+| Tideglass *(companion)* | complete **Slack Water**, in the harbour |
+| Emberlight *(companion)* | complete **Slow Sky**, in the garden |
+| Mothlight *(companion)* | know the grove half the way |
+| Starling *(companion)* | know the harbour entirely |
+
+Those conditions are **not** written down twice. `TITLES[].earn`,
+`MASTERY_REWARDS` and `COLLECTIONS[].reward` already decide who gets what, and
+`earnedBy()` in `discoveries.js` derives the map the badges display from those
+three at load — so the line on a badge is the rule that actually granted it. Add
+a reward to `MASTERY_REWARDS` and its badge explains itself with no further
+edit. The archive also reconciles at load, so a save already past a
+newly-added threshold is granted it quietly rather than sitting on a badge it
+can never collect.
+
 ### Your sanctuary
 
 From the archive you can **visit your sanctuary** — a small place that is only
@@ -174,6 +229,55 @@ journey itself — which world you are in, what you have woken there, how full
 the monument is — is written to localStorage as you go, so a refresh or a phone
 quietly killing the tab overnight puts you back where you drifted off.
 
+### The shape vocabulary
+
+Every memory has a **form**, and a form is one row of numbers in `SHAPES` at the
+top of `src/shapes.js`. Those same numbers become two things — the emblem drawn
+beside the memory in the archive, and the silhouette of the solid standing in
+the grass — so there is one description and no way for the two to drift apart.
+Forty-eight memories share nine forms between them, varied by rarity and by
+whatever the world's palette is doing.
+
+| form | reads as |
+|---|---|
+| `seed` | closed and ovoid, no lobing — the plain one |
+| `petal` | six soft folds, tapering upward |
+| `leaf` | a flat blade, pointed at both ends |
+| `flower` | eight shallow lobes, opened all the way out |
+| `thread` | long, thin, fluted, twisting |
+| `shell` | four lobes wound around themselves |
+| `bell` | narrow at the top, open at the bottom |
+| `crown` | seven points, tapering up |
+| `star` | six sharp arms, flat |
+
+A form is described by a superformula pair plus three modifiers:
+
+| field | what it does |
+|---|---|
+| `lon` | `[m, n1, n2, n3]` — the cross-section round the axis. `m` is the lobe count; low `n1` sharpens the lobes to points, high `n1` rounds them to a ring. `m: 0` is a circle. |
+| `lat` | `[m, n1, n2, n3]` — the profile, pole to pole. `[0,1,1,1]` is a plain round profile, i.e. a ball. |
+| `taper` | positive narrows the top, negative widens the base. The difference between a seed and a bell, and the one asymmetry the superformula cannot express by itself. |
+| `twist` | radians the lobing turns through between the poles. What makes a shell a shell. |
+| `stretch` | `[x, y, z]`, applied last. Tall and thin, or flat and wide. |
+
+Every form is normalised at load so that whatever the numbers say it fits the
+same radius — rarity decides how big a memory is, and a shape must never be able
+to overrule it.
+
+**To add a form**, add a row to `SHAPES` and give a memory that key. Nothing in
+the render code changes: the archive generates the emblem from the same numbers,
+and in the world a per-instance attribute feeds a vertex shader that rewrites a
+shared sphere into the form. That last part is why the table can grow without
+costing anything — one mesh per form would have multiplied the scene's draw
+calls by the size of the vocabulary, so instead the whole world's memories stay
+inside a single instanced draw call however many forms are on screen.
+
+Two things worth knowing before picking numbers. Odd lobe counts read as
+lopsided in the emblem, because it is tipped toward the viewer and the squash
+has nothing to be symmetric about — prefer even counts. And forms whose lobing
+is very round (`n1` above about 1.5) are hard to tell apart from `seed` unless
+the taper or the stretch is doing something distinct.
+
 ### Everything there is to find
 
 Forty-eight memories, twelve per world: five that make up the world's set, two
@@ -183,71 +287,71 @@ journal shows a memory only as a shape.
 
 **the waking meadow** (`meadow`)
 
-| memory | rarity | where | needs |
-|---|---|---|---|
-| Petal Memory | common | grove | — |
-| Dawn Thread | common | wander | — |
-| Sleeping Seed | common | wander | — |
-| Whispering Leaf | uncommon | grove | — |
-| Bloom Fragment | uncommon | monument | — |
-| The First Flower | rare | rim | — |
-| The Sleeping Crown | rare | fog | — |
-| The Meadow Dreaming | dream | monument | `awake: 12` |
-| Grass Hour | common | wander | — |
-| Kept Morning | uncommon | rim | — |
-| The Long Field | rare | fog | `visits: 3` |
-| What the Meadow Keeps | mythic | monument | `completion: 0.55` |
+| memory | form | rarity | where | needs |
+|---|---|---|---|---|
+| Petal Memory | petal | common | grove | — |
+| Dawn Thread | thread | common | wander | — |
+| Sleeping Seed | seed | common | wander | — |
+| Whispering Leaf | leaf | uncommon | grove | — |
+| Bloom Fragment | flower | uncommon | monument | — |
+| The First Flower | flower | rare | rim | — |
+| The Sleeping Crown | crown | rare | fog | — |
+| The Meadow Dreaming | star | dream | monument | `awake: 12` |
+| Grass Hour | thread | common | wander | — |
+| Kept Morning | seed | uncommon | rim | — |
+| The Long Field | leaf | rare | fog | `visits: 3` |
+| What the Meadow Keeps | crown | mythic | monument | `completion: 0.55` |
 
 **the quiet harbour** (`harbor`)
 
-| memory | rarity | where | needs |
-|---|---|---|---|
-| Tide Memory | common | water | — |
-| Moon Shell | common | water | — |
-| Blue Thread | common | wander | — |
-| Distant Bell | uncommon | grove | — |
-| Harbour Echo | uncommon | monument | — |
-| The Last Lantern | rare | rim | — |
-| The Quiet Name | rare | fog | — |
-| The Tide Turning | dream | water | `delivered: 10` |
-| Rope Memory | common | wander | — |
-| Low Water | uncommon | water | — |
-| The Far Bell | rare | fog | `visits: 3` |
-| What the Harbour Keeps | mythic | water | `mastery: 0.75` |
+| memory | form | rarity | where | needs |
+|---|---|---|---|---|
+| Tide Memory | shell | common | water | — |
+| Moon Shell | shell | common | water | — |
+| Blue Thread | thread | common | wander | — |
+| Distant Bell | bell | uncommon | grove | — |
+| Harbour Echo | bell | uncommon | monument | — |
+| The Last Lantern | star | rare | rim | — |
+| The Quiet Name | thread | rare | fog | — |
+| The Tide Turning | shell | dream | water | `delivered: 10` |
+| Rope Memory | thread | common | wander | — |
+| Low Water | leaf | uncommon | water | — |
+| The Far Bell | bell | rare | fog | `visits: 3` |
+| What the Harbour Keeps | crown | mythic | water | `mastery: 0.75` |
 
 **the lantern grove** (`grove`)
 
-| memory | rarity | where | needs |
-|---|---|---|---|
-| Coral Memory | common | grove | — |
-| Deep Glow | common | wander | — |
-| Lantern Seed | common | grove | — |
-| Lost Spark | uncommon | fog | — |
-| Drift Fragment | uncommon | monument | — |
-| The Breathing Reef | rare | rim | — |
-| The Drowned Gate | rare | gate | — |
-| The Grove Listening | mythic | fog | `awake: 16, visits: 2` |
-| Slow Current | common | wander | — |
-| Held Breath | uncommon | grove | — |
-| The Unlit Lantern | rare | rim | `visits: 3` |
-| What the Grove Keeps | mythic | gate | `completion: 0.70` |
+| memory | form | rarity | where | needs |
+|---|---|---|---|---|
+| Coral Memory | crown | common | grove | — |
+| Deep Glow | seed | common | wander | — |
+| Lantern Seed | seed | common | grove | — |
+| Lost Spark | star | uncommon | fog | — |
+| Drift Fragment | leaf | uncommon | monument | — |
+| The Breathing Reef | shell | rare | rim | — |
+| The Drowned Gate | crown | rare | gate | — |
+| The Grove Listening | flower | mythic | fog | `awake: 16, visits: 2` |
+| Slow Current | thread | common | wander | — |
+| Held Breath | seed | uncommon | grove | — |
+| The Unlit Lantern | bell | rare | rim | `visits: 3` |
+| What the Grove Keeps | star | mythic | gate | `completion: 0.7` |
 
 **the star garden** (`garden`)
 
-| memory | rarity | where | needs |
-|---|---|---|---|
-| Star Shard | common | grove | — |
-| Crystal Memory | common | wander | — |
-| Warm Star | common | monument | — |
-| Falling Light | uncommon | wander | — |
-| Constellation Thread | uncommon | rim | — |
-| The Garden Keeper | rare | fog | — |
-| The Unlit Star | rare | rim | — |
-| The Fourth Quiet | mythic | monument | `awake: 14, found: ['garden-keeper']` |
-| Cold Thread | common | wander | — |
-| Quiet Orbit | uncommon | grove | — |
-| The Long Night | rare | fog | `visits: 3` |
-| What the Garden Keeps | mythic | rim | `worldsVisited: 4` |
+| memory | form | rarity | where | needs |
+|---|---|---|---|---|
+| Star Shard | star | common | grove | — |
+| Crystal Memory | crown | common | wander | — |
+| Warm Star | star | common | monument | — |
+| Falling Light | thread | uncommon | wander | — |
+| Constellation Thread | thread | uncommon | rim | — |
+| The Garden Keeper | bell | rare | fog | — |
+| The Unlit Star | star | rare | rim | — |
+| The Fourth Quiet | flower | mythic | monument | `awake: 14, found: ["garden-keeper"]` |
+| Cold Thread | thread | common | wander | — |
+| Quiet Orbit | shell | uncommon | grove | — |
+| The Long Night | leaf | rare | fog | `visits: 3` |
+| What the Garden Keeps | crown | mythic | rim | `worldsVisited: 4` |
 
 ### The worlds
 
@@ -407,7 +511,38 @@ object in that array. The fields, and what each one is actually for:
 | `water` | `null`, or `{ level, size }`. Giving a `size` anchors the lake at the world's centre; without one it becomes an endless sea riding under the camera, which draws a hard line across the horizon of an island that ends in fog. |
 | `stars` | 0..1, how much of the starfield this sky admits. |
 | `fireflies` | 0..1.4, how thick the ambient drift is. |
-| `audio` | `root` in Hz, `scale` as semitone offsets, `brightness` as a lowpass cutoff. Layers walk up the scale and wrap an octave higher, so more layers is a wider chord rather than the same notes doubled. |
+| `audio` | `root` in Hz, `scale` as semitone offsets, `brightness` as a lowpass cutoff, plus the world's own timbre: `spread` (chorus width in cents) and `shimmer` (0..1, how present the brighter of each layer's two voices is). Layers walk up the scale and wrap an octave higher, so more layers is a wider chord rather than the same notes doubled. |
+
+### The ambience
+
+Everything is synthesised at runtime — a drone, a wash of filtered noise, a
+stack of layers that come up as the world wakes, and bells. Nothing is
+downloaded, which is why it works with no connection.
+
+Three things keep it moving without ever becoming an event, all in
+`CONFIG.audio`:
+
+| knob | what it does |
+|---|---|
+| `driftSeconds` | how long between chord re-voicings. Each layer steps to the next degree of the world's own scale, so the music is never where you left it. `0` holds one voicing forever. |
+| `driftGlideSeconds` | how long a re-voicing takes to arrive. Long enough that there is no moment at which it happened. |
+| `width` | stereo spread, 0..1. `0` is mono. Scales every voice's placement *and* its wander. |
+| `panSeconds` | how long one voice takes to wander across its part of the field. Minutes, on purpose — this is meant to stop the sound having a location, not to be heard as movement. |
+| `spread` / `shimmer` | fallback timbre, when a world does not name its own. |
+| `chimeGain` | the whole bell bus, so one number weighs the bells against everything else. |
+| `chimeAttack` | how long a bell takes to reach full. Long enough that no bell has an edge on it. |
+| `chimeSeconds` | the tail at the softest rarity; rarer finds ring longer. |
+| `chimeBrightness` | lowpass over the bells, in Hz. Lower is softer. This is the knob that keeps them from ever being sharp. |
+| `idleSettle` | 0..1, how far the pad closes down when the sleep fade is fully out. Something you are falling asleep to should get duller as well as quieter. |
+
+Bells are rung on a discovery — pitched and held by `RARITY.chime` — and once,
+softly, when a structure wakes under your feet. The pitch is always a degree of
+the chord already sounding, so a bell cannot be dissonant with the pad by
+construction. They are also the only thing in the file that starts and stops
+oscillators, which everything else avoids because a start or a stop is a chance
+for a click; a bell gets away with it because its gain begins at exactly zero,
+ramps over `chimeAttack`, and its nodes are stopped long after the tail is past
+hearing.
 
 ### Quality tiers
 
@@ -429,6 +564,7 @@ stay cool than look its best, and is what the software rasterisers are given.
 | Bloom | yes | yes | off | off |
 | Max motes | 48 | 34 | 20 | 14 |
 | Wanderer segments / shadow | 22 / yes | 16 / yes | 11 / no | 9 / no |
+| Memory form detail | 2 | 2 | 1 | 1 |
 | Companion | yes | yes | yes | no |
 | Drifting pollen | 260 | 170 | 90 | off |
 | Silhouettes past the rim | 22 | 16 | 11 | 6 |
@@ -467,6 +603,7 @@ src/terrain.js      the ground heightfield, its shader, and heightAt()
 src/character.js    the wanderer: one lathe, a swaying hem, eyes, idle life
 src/companion.js    the small light that keeps them company
 src/discoveries.js  what there is to find, and what finding it earns (all data)
+src/shapes.js       the shape vocabulary: one table, an SVG emblem and a GLSL form
 src/archive.js      the Dream Archive: found, mastery, unlocks, save migration
 src/fragments.js    the memories as objects in the ground, instanced
 src/journal.js      the archive as a page (DOM, only renders when open)
@@ -482,8 +619,8 @@ src/sky.js          gradient dome and the parallax star shells
 src/water.js        lakes (Water addon, or a shaded plane on low)
 src/fireflies.js    points animated entirely in the vertex shader
 src/haze.js         horizon mist band
-src/audio.js        drone, noise wash, and the layers that come up as you explore
-src/ui.js           title, hints, settings panel, gate fade, sleep fade, wake lock
+src/audio.js        drone, noise wash, drifting chord, stereo width, and bells
+src/ui.js           title, hints, settings panel, the reveal, gate fade, sleep fade
 src/save.js         settings + journey persistence, best-effort localStorage
 src/quality.js      tier detection + the frame-time watcher
 src/textures.js     the water normal map and the seeded PRNG

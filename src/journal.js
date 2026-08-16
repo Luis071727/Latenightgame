@@ -1,7 +1,8 @@
 import {
   DISCOVERIES, COLLECTIONS, COSMETICS, TITLES, RARITY,
-  discoveriesOf, title, cosmetic,
+  discoveriesOf, title, cosmetic, describeEarn,
 } from './discoveries.js';
+import { paintEmblem } from './shapes.js';
 
 /**
  * The Dream Archive, as a page you can open.
@@ -49,7 +50,7 @@ export function createJournal({
     if (!b) return;
     tab = b.dataset.tab;
     onTab?.(tab);
-    render();
+    render(true);
   });
 
   closeEl.addEventListener('click', () => hide());
@@ -225,14 +226,21 @@ export function createJournal({
       for (const d of list) {
         const has = found.includes(d.id);
         const item = el(`j-mem ${has ? 'found' : 'unfound'} r-${d.rarity}`);
-        const dot = el('j-mem-dot');
-        dot.style.setProperty('--r-glow', String(RARITY[d.rarity]?.glow ?? 1));
-        item.appendChild(dot);
+
+        /* The emblem, drawn from the same numbers as the solid standing out
+           there in the grass. An unfound one is the identical drawing at a
+           lower opacity — which is the point: the silhouette is the hint, and
+           a row of shapes you have not found yet is a far better reason to go
+           and look than a row of question marks would be. */
+        const em = el('j-mem-emblem');
+        em.style.setProperty('--r-glow', String(RARITY[d.rarity]?.glow ?? 1));
+        paintEmblem(em, d.shape);
+        item.appendChild(em);
 
         const txt = el('j-mem-text');
-        // An unfound memory keeps its name. What it shows instead is its
-        // rarity and the fact that it exists — enough to be worth going to
-        // look for, never enough to be a checklist with directions on it.
+        // An unfound memory keeps its name back. What it shows instead is its
+        // form, its rarity and the fact that it exists — enough to be worth
+        // going to look for, never enough to be a checklist with directions.
         txt.appendChild(el('j-mem-name', has ? d.name : '—'));
         txt.appendChild(el('j-mem-note',
           has ? d.note
@@ -249,17 +257,28 @@ export function createJournal({
 
   /* ── wanderer ────────────────────────────────────────────────────────── */
 
+  /**
+   * Everything you have been given, and everything you have not.
+   *
+   * A badge rather than a button with a name on it: its own emblem, how much
+   * of an achievement it is, and the exact condition that earned it — or, if
+   * it has not been earned, the same condition written as an invitation, with
+   * how far along you are whenever that is a thing you can count. A locked
+   * entry that says "not yet earned" and nothing else, which is what this used
+   * to be, tells you neither what it is nor how to get it.
+   */
   function renderWanderer() {
     const out = el('j-page');
 
-    out.appendChild(pickerFor('title', 'title', TITLES));
-    out.appendChild(pickerFor('cloak', 'cloak', COSMETICS.cloak));
-    out.appendChild(pickerFor('companion', 'companion', COSMETICS.companion));
+    out.appendChild(badgesFor('title', 'titles', TITLES));
+    out.appendChild(badgesFor('cloak', 'cloaks', COSMETICS.cloak));
+    out.appendChild(badgesFor('companion', 'companions', COSMETICS.companion));
 
     const locked = countLocked();
     if (locked > 0) {
       out.appendChild(el('j-quiet',
-        `${locked} more ${locked === 1 ? 'thing is' : 'things are'} out there to be earned.`));
+        `${locked} more ${locked === 1 ? 'thing is' : 'things are'} out there to be earned. `
+        + 'None of them are going anywhere.'));
     }
     return out;
   }
@@ -273,33 +292,77 @@ export function createJournal({
     return n;
   }
 
-  function pickerFor(kind, label, all) {
+  /** a world key as the player knows it, for the lines on a badge */
+  const worldName = (key) => worlds.find((w) => w.key === key)?.name || key;
+
+  function badgesFor(kind, label, all) {
     const block = el('j-block');
     block.appendChild(el('j-label', label));
 
-    const list = el('j-picker');
+    const list = el('j-badges');
     for (const c of all) {
-      const owned = archive.owns(kind, c.id);
-      const on = archive.equipped(kind) === c.id;
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = `j-pick${on ? ' on' : ''}${owned ? '' : ' locked'}`;
-      b.disabled = !owned;
+      const b = archive.badge(kind, c.id);
+      if (!b) continue;
 
-      b.appendChild(el('j-pick-name', owned ? c.name : 'not yet earned'));
-      if (c.note) b.appendChild(el('j-pick-note', owned ? c.note : ' '));
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = `j-badge w-${b.weight}`
+        + (b.worn ? ' worn' : '') + (b.owned ? '' : ' locked');
+      row.disabled = !b.owned;
 
-      if (owned) {
-        b.addEventListener('click', () => {
+      const em = el('j-badge-emblem');
+      paintEmblem(em, b.emblem);
+      row.appendChild(em);
+
+      const txt = el('j-badge-text');
+      const top = el('j-badge-top');
+      top.appendChild(el('j-badge-name', b.name));
+      // what it is worth, said once, quietly
+      top.appendChild(el('j-badge-weight', b.worn ? 'worn' : b.weight));
+      txt.appendChild(top);
+
+      /* Earned: what it is. Not earned: what would earn it. The default has no
+         condition to state — it was never earned, it was where you started. */
+      const how = b.owned
+        ? b.note
+        : (describeEarn(b.condition, worldName) || b.note || 'Keep going.');
+      txt.appendChild(el('j-badge-note', how));
+
+      // ...and how close, when it is a thing that can be counted
+      if (!b.owned && b.progress && b.progress.need > 0) {
+        txt.appendChild(meter(b.progress.ratio));
+        txt.appendChild(el('j-badge-progress', progressText(b.condition, b.progress)));
+      }
+
+      row.appendChild(txt);
+
+      if (b.owned) {
+        row.addEventListener('click', () => {
           archive.equip(kind, c.id);
           onEquip?.(kind, c.id);
           render();
         });
       }
-      list.appendChild(b);
+      list.appendChild(row);
     }
     block.appendChild(list);
     return block;
+  }
+
+  /**
+   * "3 of 8" for a count, "40% of 75%" for a proportion.
+   *
+   * Clamped, because a badge that is still locked can only be showing
+   * progress it has not finished — reading past its own target would look
+   * like the game had lost count.
+   */
+  function progressText(cond, p) {
+    const have = Math.min(p.have, p.need);
+    const proportional = cond
+      && (cond.completion !== undefined || cond.mastery !== undefined);
+    return proportional
+      ? `${pct(have)} of ${pct(p.need)}`
+      : `${Math.floor(have)} of ${p.need}`;
   }
 
   /* ── beside ──────────────────────────────────────────────────────────
@@ -316,6 +379,25 @@ export function createJournal({
     out.appendChild(el('j-quiet',
       'A quiet place to compare journeys. Nothing here is a race, '
       + 'and nobody is keeping score.'));
+
+    /* Who you are, on the one screen that shows you beside anyone else. The
+       title is the only earned thing a profile carries, so it is shown here
+       the way it is shown in the wanderer tab — as a badge, with its emblem —
+       rather than as a name in small print. */
+    profiles?.me().then((me) => {
+      if (tab !== 'beside' || !me) return;
+      const card = el('j-me');
+      if (me.title) {
+        const em = el('j-me-emblem');
+        paintEmblem(em, me.title.emblem);
+        card.appendChild(em);
+      }
+      const txt = el('j-me-text');
+      txt.appendChild(el('j-me-name', me.name));
+      if (me.title) txt.appendChild(el('j-me-title', me.title.name));
+      card.appendChild(txt);
+      out.insertBefore(card, out.firstChild?.nextSibling || null);
+    });
 
     if (!leaderboard) return out;
 
@@ -347,12 +429,23 @@ export function createJournal({
 
   /* ── rendering ───────────────────────────────────────────────────────── */
 
-  function render() {
+  /**
+   * @param toTop true when the page has actually changed — opening the
+   *   archive, or moving to another tab.
+   *
+   * Equipping something re-renders the tab it is on, and those tabs are long:
+   * the wanderer tab is well over two thousand pixels once every badge is in
+   * it. Sending the view back to the top every time meant choosing a cloak
+   * halfway down threw you up to the first title, which reads as the archive
+   * having lost your place — so the scroll position is kept across a re-render
+   * of the same page and only reset when the page is a different one.
+   */
+  function render(toTop = false) {
     for (const b of tabsEl.querySelectorAll('button')) {
       b.classList.toggle('on', b.dataset.tab === tab);
     }
+    const was = bodyEl.scrollTop;
     bodyEl.textContent = '';
-    bodyEl.scrollTop = 0;
     bodyEl.appendChild(
       tab === 'worlds' ? renderWorlds()
       : tab === 'memories' ? renderMemories()
@@ -360,12 +453,13 @@ export function createJournal({
       : tab === 'beside' ? renderBeside()
       : renderJourney()
     );
+    bodyEl.scrollTop = toTop ? 0 : was;
   }
 
   function show(which) {
     if (which) tab = which;
     open = true;
-    render();
+    render(true);
     root.classList.add('open');
     root.setAttribute('aria-hidden', 'false');
   }

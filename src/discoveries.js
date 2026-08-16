@@ -86,136 +86,144 @@ export const PLACE = {
  * long tail: they are what makes a world you finished months ago worth
  * standing in again, because there is now something in it that was not there
  * when you left.
+ *
+ * `shape` is which form out of the vocabulary in shapes.js this one takes. It
+ * is the memory's identity: the emblem drawn beside it in the archive and the
+ * silhouette of the solid standing in the grass are the same nine rows of
+ * numbers, so a rare find reads as a distinct object rather than as another
+ * crystal. Names were matched to forms by hand — a thread is a thread, a bell
+ * is a bell — and forty-eight memories share nine forms between them, varied
+ * by rarity and by whatever the world's palette is doing.
  */
 export const DISCOVERIES = {
   meadow: [
-    { id: 'petal-memory',    name: 'Petal Memory',       rarity: 'common',   place: 'grove',
+    { id: 'petal-memory',    name: 'Petal Memory',       rarity: 'common',   place: 'grove', shape: 'petal',
       note: 'The first light of the meadow, folded into a petal.' },
-    { id: 'dawn-thread',     name: 'Dawn Thread',        rarity: 'common',   place: 'wander',
+    { id: 'dawn-thread',     name: 'Dawn Thread',        rarity: 'common',   place: 'wander', shape: 'thread',
       note: 'A single warm line, pulled loose from the morning.' },
-    { id: 'sleeping-seed',   name: 'Sleeping Seed',      rarity: 'common',   place: 'wander',
+    { id: 'sleeping-seed',   name: 'Sleeping Seed',      rarity: 'common',   place: 'wander', shape: 'seed',
       note: 'It has not decided what to become. It is in no hurry.' },
-    { id: 'whispering-leaf', name: 'Whispering Leaf',    rarity: 'uncommon', place: 'grove',
+    { id: 'whispering-leaf', name: 'Whispering Leaf',    rarity: 'uncommon', place: 'grove', shape: 'leaf',
       note: 'Held to the ear it repeats something you almost said.' },
-    { id: 'bloom-fragment',  name: 'Bloom Fragment',     rarity: 'uncommon', place: 'monument',
+    { id: 'bloom-fragment',  name: 'Bloom Fragment',     rarity: 'uncommon', place: 'monument', shape: 'flower',
       note: 'A piece of an opening that never quite finishes.' },
 
-    { id: 'first-flower',    name: 'The First Flower',   rarity: 'rare',     place: 'rim',
+    { id: 'first-flower',    name: 'The First Flower',   rarity: 'rare',     place: 'rim', shape: 'flower',
       note: 'It grew facing away from the middle, toward whatever is out there.' },
-    { id: 'sleeping-crown',  name: 'The Sleeping Crown', rarity: 'rare',     place: 'fog',
+    { id: 'sleeping-crown',  name: 'The Sleeping Crown', rarity: 'rare',     place: 'fog', shape: 'crown',
       note: 'Left at the edge by someone who decided not to be king.' },
 
-    { id: 'meadow-dreaming', name: 'The Meadow Dreaming', rarity: 'dream',   place: 'monument',
+    { id: 'meadow-dreaming', name: 'The Meadow Dreaming', rarity: 'dream',   place: 'monument', shape: 'star',
       needs: { awake: 12 },
       note: 'With enough of it awake, the meadow dreams of itself, and leaves this behind.' },
 
-    { id: 'grass-hour',      name: 'Grass Hour',         rarity: 'common',   place: 'wander',
+    { id: 'grass-hour',      name: 'Grass Hour',         rarity: 'common',   place: 'wander', shape: 'thread',
       note: 'However long you stand in it, it is this hour. It has always been this hour.' },
-    { id: 'kept-morning',    name: 'Kept Morning',       rarity: 'uncommon', place: 'rim',
+    { id: 'kept-morning',    name: 'Kept Morning',       rarity: 'uncommon', place: 'rim', shape: 'seed',
       note: 'Someone put a morning aside for later and then never had a later.' },
-    { id: 'the-long-field',  name: 'The Long Field',     rarity: 'rare',     place: 'fog',
+    { id: 'the-long-field',  name: 'The Long Field',     rarity: 'rare',     place: 'fog', shape: 'leaf',
       needs: { visits: 3 },
       note: 'It only goes on this far on the third time of asking.' },
-    { id: 'meadow-keeping',  name: 'What the Meadow Keeps', rarity: 'mythic', place: 'monument',
+    { id: 'meadow-keeping',  name: 'What the Meadow Keeps', rarity: 'mythic', place: 'monument', shape: 'crown',
       needs: { completion: 0.55 },
       note: 'It has been holding this for you since the beginning, in case you came far enough back.' },
   ],
 
   harbor: [
-    { id: 'tide-memory',     name: 'Tide Memory',        rarity: 'common',   place: 'water',
+    { id: 'tide-memory',     name: 'Tide Memory',        rarity: 'common',   place: 'water', shape: 'shell',
       note: 'The shape the water makes when it is remembering going out.' },
-    { id: 'moon-shell',      name: 'Moon Shell',         rarity: 'common',   place: 'water',
+    { id: 'moon-shell',      name: 'Moon Shell',         rarity: 'common',   place: 'water', shape: 'shell',
       note: 'Pale, and slightly too light for its size.' },
-    { id: 'blue-thread',     name: 'Blue Thread',        rarity: 'common',   place: 'wander',
+    { id: 'blue-thread',     name: 'Blue Thread',        rarity: 'common',   place: 'wander', shape: 'thread',
       note: 'It runs from somewhere to somewhere. Both ends are elsewhere.' },
-    { id: 'distant-bell',    name: 'Distant Bell',       rarity: 'uncommon', place: 'grove',
+    { id: 'distant-bell',    name: 'Distant Bell',       rarity: 'uncommon', place: 'grove', shape: 'bell',
       note: 'It has already rung. You are hearing the part that stayed.' },
-    { id: 'harbour-echo',    name: 'Harbour Echo',       rarity: 'uncommon', place: 'monument',
+    { id: 'harbour-echo',    name: 'Harbour Echo',       rarity: 'uncommon', place: 'monument', shape: 'bell',
       note: 'A sound with nothing left in front of it.' },
 
-    { id: 'last-lantern',    name: 'The Last Lantern',   rarity: 'rare',     place: 'rim',
+    { id: 'last-lantern',    name: 'The Last Lantern',   rarity: 'rare',     place: 'rim', shape: 'star',
       note: 'Still lit, for a boat that has been arriving for a very long time.' },
-    { id: 'quiet-name',      name: 'The Quiet Name',     rarity: 'rare',     place: 'fog',
+    { id: 'quiet-name',      name: 'The Quiet Name',     rarity: 'rare',     place: 'fog', shape: 'thread',
       note: 'Someone said it once here and the fog has been holding it since.' },
 
-    { id: 'tide-turning',    name: 'The Tide Turning',   rarity: 'dream',    place: 'water',
+    { id: 'tide-turning',    name: 'The Tide Turning',   rarity: 'dream',    place: 'water', shape: 'shell',
       needs: { delivered: 10 },
       note: 'Give the spire enough light and the water changes its mind.' },
 
-    { id: 'rope-memory',     name: 'Rope Memory',        rarity: 'common',   place: 'wander',
+    { id: 'rope-memory',     name: 'Rope Memory',        rarity: 'common',   place: 'wander', shape: 'thread',
       note: 'Still tied. Whatever it was tied to has gone on without it.' },
-    { id: 'low-water',       name: 'Low Water',          rarity: 'uncommon', place: 'water',
+    { id: 'low-water',       name: 'Low Water',          rarity: 'uncommon', place: 'water', shape: 'leaf',
       note: 'The harbour at its most honest, which is also its emptiest.' },
-    { id: 'the-far-bell',    name: 'The Far Bell',       rarity: 'rare',     place: 'fog',
+    { id: 'the-far-bell',    name: 'The Far Bell',       rarity: 'rare',     place: 'fog', shape: 'bell',
       needs: { visits: 3 },
       note: 'There is a second bell further out. You have to have been here a while to hear it.' },
-    { id: 'harbour-keeping', name: 'What the Harbour Keeps', rarity: 'mythic', place: 'water',
+    { id: 'harbour-keeping', name: 'What the Harbour Keeps', rarity: 'mythic', place: 'water', shape: 'crown',
       needs: { mastery: 0.75 },
       note: 'Know the place well enough and the water gives something back rather than taking it.' },
   ],
 
   grove: [
-    { id: 'coral-memory',    name: 'Coral Memory',       rarity: 'common',   place: 'grove',
+    { id: 'coral-memory',    name: 'Coral Memory',       rarity: 'common',   place: 'grove', shape: 'crown',
       note: 'Grown one slow thought at a time.' },
-    { id: 'deep-glow',       name: 'Deep Glow',          rarity: 'common',   place: 'wander',
+    { id: 'deep-glow',       name: 'Deep Glow',          rarity: 'common',   place: 'wander', shape: 'seed',
       note: 'Light that has never once been to the surface.' },
-    { id: 'lantern-seed',    name: 'Lantern Seed',       rarity: 'common',   place: 'grove',
+    { id: 'lantern-seed',    name: 'Lantern Seed',       rarity: 'common',   place: 'grove', shape: 'seed',
       note: 'Plant it and something will be lit. Not necessarily a lamp.' },
-    { id: 'lost-spark',      name: 'Lost Spark',         rarity: 'uncommon', place: 'fog',
+    { id: 'lost-spark',      name: 'Lost Spark',         rarity: 'uncommon', place: 'fog', shape: 'star',
       note: 'It got separated from whatever it was meant to start.' },
-    { id: 'drift-fragment',  name: 'Drift Fragment',     rarity: 'uncommon', place: 'monument',
+    { id: 'drift-fragment',  name: 'Drift Fragment',     rarity: 'uncommon', place: 'monument', shape: 'leaf',
       note: 'Broken off the sponge, and still faintly counting.' },
 
-    { id: 'breathing-reef',  name: 'The Breathing Reef', rarity: 'rare',     place: 'rim',
+    { id: 'breathing-reef',  name: 'The Breathing Reef', rarity: 'rare',     place: 'rim', shape: 'shell',
       note: 'Out where the grove thins, something is keeping time.' },
-    { id: 'drowned-gate',    name: 'The Drowned Gate',   rarity: 'rare',     place: 'gate',
+    { id: 'drowned-gate',    name: 'The Drowned Gate',   rarity: 'rare',     place: 'gate', shape: 'crown',
       note: 'A door that was here before the door.' },
 
-    { id: 'grove-listening', name: 'The Grove Listening', rarity: 'mythic',  place: 'fog',
+    { id: 'grove-listening', name: 'The Grove Listening', rarity: 'mythic',  place: 'fog', shape: 'flower',
       needs: { awake: 16, visits: 2 },
       note: 'Come back to a grove you have already woken, and walk into the white. It knows you.' },
 
-    { id: 'slow-current',    name: 'Slow Current',       rarity: 'common',   place: 'wander',
+    { id: 'slow-current',    name: 'Slow Current',       rarity: 'common',   place: 'wander', shape: 'thread',
       note: 'It is going somewhere. It will arrive long after everything else has.' },
-    { id: 'held-breath',     name: 'Held Breath',        rarity: 'uncommon', place: 'grove',
+    { id: 'held-breath',     name: 'Held Breath',        rarity: 'uncommon', place: 'grove', shape: 'seed',
       note: 'Nobody has let this out yet. There has not been a good moment.' },
-    { id: 'the-unlit',       name: 'The Unlit Lantern',  rarity: 'rare',     place: 'rim',
+    { id: 'the-unlit',       name: 'The Unlit Lantern',  rarity: 'rare',     place: 'rim', shape: 'bell',
       needs: { visits: 3 },
       note: 'The one at the end of the row. It has been saving itself.' },
-    { id: 'grove-keeping',   name: 'What the Grove Keeps', rarity: 'mythic', place: 'gate',
+    { id: 'grove-keeping',   name: 'What the Grove Keeps', rarity: 'mythic', place: 'gate', shape: 'star',
       needs: { completion: 0.70 },
       note: 'Left by the door, the way you leave something for a person you know is coming back.' },
   ],
 
   garden: [
-    { id: 'star-shard',      name: 'Star Shard',         rarity: 'common',   place: 'grove',
+    { id: 'star-shard',      name: 'Star Shard',         rarity: 'common',   place: 'grove', shape: 'star',
       note: 'Cold on one face, warm on the other.' },
-    { id: 'crystal-memory',  name: 'Crystal Memory',     rarity: 'common',   place: 'wander',
+    { id: 'crystal-memory',  name: 'Crystal Memory',     rarity: 'common',   place: 'wander', shape: 'crown',
       note: 'It remembers being enormous.' },
-    { id: 'warm-star',       name: 'Warm Star',          rarity: 'common',   place: 'monument',
+    { id: 'warm-star',       name: 'Warm Star',          rarity: 'common',   place: 'monument', shape: 'star',
       note: 'Small enough to hold, which is not how stars usually work.' },
-    { id: 'falling-light',   name: 'Falling Light',      rarity: 'uncommon', place: 'wander',
+    { id: 'falling-light',   name: 'Falling Light',      rarity: 'uncommon', place: 'wander', shape: 'thread',
       note: 'Caught on the way down. It does not seem to mind.' },
-    { id: 'constellation',   name: 'Constellation Thread', rarity: 'uncommon', place: 'rim',
+    { id: 'constellation',   name: 'Constellation Thread', rarity: 'uncommon', place: 'rim', shape: 'thread',
       note: 'Joins two stars that have never agreed on anything.' },
 
-    { id: 'garden-keeper',   name: 'The Garden Keeper',  rarity: 'rare',     place: 'fog',
+    { id: 'garden-keeper',   name: 'The Garden Keeper',  rarity: 'rare',     place: 'fog', shape: 'bell',
       note: 'Not a person. Something that has been tending this a while.' },
-    { id: 'unlit-star',      name: 'The Unlit Star',     rarity: 'rare',     place: 'rim',
+    { id: 'unlit-star',      name: 'The Unlit Star',     rarity: 'rare',     place: 'rim', shape: 'star',
       note: 'Waiting its turn. It has been waiting its turn for some time.' },
 
-    { id: 'fourth-quiet',    name: 'The Fourth Quiet',   rarity: 'mythic',   place: 'monument',
+    { id: 'fourth-quiet',    name: 'The Fourth Quiet',   rarity: 'mythic',   place: 'monument', shape: 'flower',
       needs: { awake: 14, found: ['garden-keeper'] },
       note: 'The last still place, at the middle of the last garden.' },
 
-    { id: 'cold-thread',     name: 'Cold Thread',        rarity: 'common',   place: 'wander',
+    { id: 'cold-thread',     name: 'Cold Thread',        rarity: 'common',   place: 'wander', shape: 'thread',
       note: 'Runs from here to something enormous, a very long way off, that has not noticed.' },
-    { id: 'quiet-orbit',     name: 'Quiet Orbit',        rarity: 'uncommon', place: 'grove',
+    { id: 'quiet-orbit',     name: 'Quiet Orbit',        rarity: 'uncommon', place: 'grove', shape: 'shell',
       note: 'Going round something that is no longer there, out of habit and affection.' },
-    { id: 'the-long-night',  name: 'The Long Night',     rarity: 'rare',     place: 'fog',
+    { id: 'the-long-night',  name: 'The Long Night',     rarity: 'rare',     place: 'fog', shape: 'leaf',
       needs: { visits: 3 },
       note: 'Not a bad one. Just long, and you have to have stayed to be given it.' },
-    { id: 'garden-keeping',  name: 'What the Garden Keeps', rarity: 'mythic', place: 'rim',
+    { id: 'garden-keeping',  name: 'What the Garden Keeps', rarity: 'mythic', place: 'rim', shape: 'crown',
       needs: { worldsVisited: 4 },
       note: 'It waited until you had been everywhere, so that it would be the last thing.' },
   ],
@@ -259,31 +267,31 @@ export const COLLECTIONS = [
  */
 export const COSMETICS = {
   cloak: [
-    { id: 'wanderer', name: 'Wanderer', default: true,
+    { id: 'wanderer', name: 'Wanderer', default: true, emblem: 'seed', weight: 'common',
       note: 'What you set out in. It takes the colour of wherever you are.',
       colors: null },
-    { id: 'dawn', name: 'Dawn', note: 'The meadow, kept.',
+    { id: 'dawn', name: 'Dawn', note: 'The meadow, kept.', emblem: 'petal', weight: 'uncommon',
       colors: { cloakLow: 0x4a3450, cloakHigh: 0xc98f88, cloakRim: 0xffd2b4, cloakGlow: 0xffd6a8 } },
-    { id: 'lantern', name: 'Lantern', note: 'Lit from somewhere under the surface.',
+    { id: 'lantern', name: 'Lantern', note: 'Lit from somewhere under the surface.', emblem: 'bell', weight: 'uncommon',
       colors: { cloakLow: 0x1e3a40, cloakHigh: 0x5aa192, cloakRim: 0xa8ffe4, cloakGlow: 0xa8ffe4 } },
-    { id: 'tideline', name: 'Tideline', note: 'The colour the harbour goes just before it is dark.',
+    { id: 'tideline', name: 'Tideline', note: 'The colour the harbour goes just before it is dark.', emblem: 'shell', weight: 'rare',
       colors: { cloakLow: 0x2a2c50, cloakHigh: 0x6f7fb8, cloakRim: 0xc9d8ff, cloakGlow: 0xbfd0ff } },
-    { id: 'nightfall', name: 'Nightfall', note: 'Worn by someone who has been to the end and come back.',
+    { id: 'nightfall', name: 'Nightfall', note: 'Worn by someone who has been to the end and come back.', emblem: 'star', weight: 'rare',
       colors: { cloakLow: 0x1a1730, cloakHigh: 0x4e4478, cloakRim: 0xe8d4ff, cloakGlow: 0xe8d4ff } },
-    { id: 'firstlight', name: 'First Light', note: 'For the one who found everything.',
+    { id: 'firstlight', name: 'First Light', note: 'For the one who found everything.', emblem: 'flower', weight: 'dream',
       colors: { cloakLow: 0x3e3450, cloakHigh: 0xd8c090, cloakRim: 0xfff0d0, cloakGlow: 0xffe2b0 } },
   ],
 
   companion: [
-    { id: 'wisp', name: 'Wisp', default: true,
+    { id: 'wisp', name: 'Wisp', default: true, emblem: 'seed', weight: 'common',
       note: 'The small light that has always been with you.', color: null },
-    { id: 'tideglass', name: 'Tideglass', note: 'It picked you up somewhere near the water.',
+    { id: 'tideglass', name: 'Tideglass', note: 'It picked you up somewhere near the water.', emblem: 'shell', weight: 'uncommon',
       color: 0xbfd0ff },
-    { id: 'emberlight', name: 'Emberlight', note: 'Warm, and slightly too interested in everything.',
+    { id: 'emberlight', name: 'Emberlight', note: 'Warm, and slightly too interested in everything.', emblem: 'flower', weight: 'uncommon',
       color: 0xffc08a },
-    { id: 'mothlight', name: 'Mothlight', note: 'It found the grove first and waited for you there.',
+    { id: 'mothlight', name: 'Mothlight', note: 'It found the grove first and waited for you there.', emblem: 'leaf', weight: 'rare',
       color: 0xa8ffe4 },
-    { id: 'starling', name: 'Starling', note: 'Very old. Very small.',
+    { id: 'starling', name: 'Starling', note: 'Very old. Very small.', emblem: 'star', weight: 'dream',
       color: 0xe8d4ff },
   ],
 };
@@ -481,39 +489,134 @@ export function applyVariant(world, id) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * What a wanderer can be called. `earn` is checked against the archive's own
- * summary, so a title is always a statement about something the player did
- * rather than a thing they bought.
+ * What a wanderer can be called.
+ *
+ * `earn` is checked against the archive's own summary, so a title is always a
+ * statement about something the player did rather than a thing they bought.
+ * The ones without an `earn` here are granted by passing a mastery threshold —
+ * see MASTERY_REWARDS — and their condition is *derived* from that table by
+ * `earnedBy` below rather than written out twice, so the line the Wanderer tab
+ * shows and the rule that actually grants the thing cannot drift apart.
+ *
+ * `emblem` is which form from the shape vocabulary stands for it, and `weight`
+ * is how much of an achievement it is, on the same ladder rarity uses — both
+ * so that a title can be presented as a badge rather than as a word.
  */
 export const TITLES = [
-  { id: 'wanderer', name: 'The Wanderer', default: true,
+  { id: 'wanderer', name: 'The Wanderer', default: true, emblem: 'seed', weight: 'common',
     note: 'Everyone starts here.' },
-  { id: 'first-wanderer', name: 'First Wanderer',
+  { id: 'first-wanderer', name: 'First Wanderer', emblem: 'petal', weight: 'common',
     note: 'Found your first memory.', earn: { discoveries: 1 } },
-  { id: 'meadow-listener', name: 'Meadow Listener',
+  { id: 'meadow-listener', name: 'Meadow Listener', emblem: 'petal', weight: 'uncommon',
     note: 'A quarter of the meadow known.' },
-  { id: 'tide-dreamer', name: 'Tide Dreamer',
+  { id: 'tide-dreamer', name: 'Tide Dreamer', emblem: 'shell', weight: 'uncommon',
     note: 'A quarter of the harbour known.' },
-  { id: 'lantern-keeper', name: 'Lantern Keeper',
+  { id: 'lantern-keeper', name: 'Lantern Keeper', emblem: 'bell', weight: 'uncommon',
     note: 'A quarter of the grove known.' },
-  { id: 'star-cartographer', name: 'Star Cartographer',
+  { id: 'star-cartographer', name: 'Star Cartographer', emblem: 'star', weight: 'uncommon',
     note: 'A quarter of the garden known.' },
-  { id: 'keeper-small-lights', name: 'Keeper of Small Lights',
+  { id: 'keeper-small-lights', name: 'Keeper of Small Lights', emblem: 'flower', weight: 'dream',
     note: 'The meadow, entirely.' },
-  { id: 'collector-quiet-things', name: 'Collector of Quiet Things',
+  { id: 'collector-quiet-things', name: 'Collector of Quiet Things', emblem: 'leaf', weight: 'dream',
     note: 'The grove, entirely.' },
-  { id: 'the-unhurried', name: 'The Unhurried',
+  { id: 'the-unhurried', name: 'The Unhurried', emblem: 'crown', weight: 'dream',
     note: 'The garden, entirely. There was never any rush.' },
-  { id: 'keeper-fourth-gate', name: 'Keeper of the Fourth Gate',
+  { id: 'keeper-fourth-gate', name: 'Keeper of the Fourth Gate', emblem: 'crown', weight: 'rare',
     note: 'Walked through every gate there is.', earn: { worldsVisited: 4 } },
-  { id: 'dream-architect', name: 'Dream Architect',
+  { id: 'dream-architect', name: 'Dream Architect', emblem: 'flower', weight: 'dream',
     note: 'Every set completed.', earn: { collections: 4 } },
-  { id: 'finder-of-rare-things', name: 'Finder of Rare Things',
+  { id: 'finder-of-rare-things', name: 'Finder of Rare Things', emblem: 'star', weight: 'rare',
     note: 'Eight rare discoveries or better.', earn: { rare: 8 } },
+
+  /* The two at the far end. One is the first time the game hands over
+     something it called mythic; the other is very nearly all of it, and is
+     meant to be the last thing anyone earns. */
+  { id: 'keeper-of-the-strange', name: 'Keeper of the Strange', emblem: 'shell', weight: 'dream',
+    note: 'Held something mythic.', earn: { mythic: 1 } },
+  { id: 'the-long-way-round', name: 'The Long Way Round', emblem: 'crown', weight: 'mythic',
+    note: 'Nine tenths of everything there is.', earn: { completion: 0.9 } },
 ];
 
 export function title(id) {
   return TITLES.find((t) => t.id === id) || null;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   what earned a thing
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Every title and cosmetic, mapped to the condition that grants it.
+ *
+ * Built rather than authored. Three tables already decide who gets what —
+ * `TITLES[].earn`, `MASTERY_REWARDS` and `COLLECTIONS[].reward` — and writing
+ * the conditions out a fourth time so the Wanderer tab could display them
+ * would have meant two sources of truth for the same fact, which stay in
+ * agreement exactly until the first time somebody edits one of them. So the
+ * map is derived from those three at load, and a line on a badge is the same
+ * rule that actually granted the badge.
+ */
+const EARNED = new Map();
+const earnKey = (type, id) => `${type}:${id}`;
+
+for (const t of TITLES) {
+  if (t.earn) EARNED.set(earnKey('title', t.id), t.earn);
+}
+for (const [world, rewards] of Object.entries(MASTERY_REWARDS)) {
+  for (const r of rewards) {
+    // an explicit earn wins: it is the one that checkTitles actually tests
+    if (!EARNED.has(earnKey(r.type, r.id))) {
+      EARNED.set(earnKey(r.type, r.id), { mastery: { world, at: r.at } });
+    }
+  }
+}
+for (const c of COLLECTIONS) {
+  const k = earnKey(c.reward.type, c.reward.id);
+  if (!EARNED.has(k)) EARNED.set(k, { set: c.id, world: c.world });
+}
+
+/** the condition that grants this title or cosmetic, or null for a default */
+export function earnedBy(type, id) {
+  return EARNED.get(earnKey(type, id)) || null;
+}
+
+/**
+ * The condition, as a line someone would actually want to read.
+ *
+ * @param nameOf resolves a world key to its display name; the world names live
+ *   in worlds.js and this file deliberately does not know about that one.
+ */
+export function describeEarn(cond, nameOf = (k) => k) {
+  if (!cond) return '';
+  if (cond.mastery) {
+    const w = nameOf(cond.mastery.world);
+    return cond.mastery.at >= 1
+      ? `Know ${w} entirely.`
+      : `Know ${w} ${Math.round(cond.mastery.at * 100)}% of the way.`;
+  }
+  if (cond.set) {
+    const c = COLLECTIONS.find((x) => x.id === cond.set);
+    return `Complete ${c ? c.name : 'the set'}, in ${nameOf(cond.world)}.`;
+  }
+  if (cond.discoveries !== undefined) {
+    return cond.discoveries === 1
+      ? 'Find your first memory.'
+      : `Keep ${cond.discoveries} memories.`;
+  }
+  if (cond.rare !== undefined) return `Find ${cond.rare} rare memories or better.`;
+  if (cond.mythic !== undefined) {
+    return cond.mythic === 1 ? 'Find something mythic.' : `Find ${cond.mythic} mythic memories.`;
+  }
+  if (cond.collections !== undefined) {
+    return cond.collections >= COLLECTIONS.length
+      ? 'Complete every set there is.'
+      : `Complete ${cond.collections} sets.`;
+  }
+  if (cond.worldsVisited !== undefined) return `Walk in ${cond.worldsVisited} worlds.`;
+  if (cond.completion !== undefined) {
+    return `Find ${Math.round(cond.completion * 100)}% of everything there is.`;
+  }
+  return '';
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

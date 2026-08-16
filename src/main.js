@@ -25,7 +25,9 @@ import { createSanctuaryDisplay } from './sanctuary.js';
 import { createStory, BEATS as STORY_BEATS } from './story.js';
 import { createAnalytics, EVENTS } from './analytics.js';
 import { createProfileService, createLeaderboardService } from './leaderboard.js';
-import { RARITY, title, cosmetic, applyVariant } from './discoveries.js';
+import {
+  RARITY, title, cosmetic, applyVariant, earnedBy, describeEarn,
+} from './discoveries.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIG — everything worth tweaking lives here.
@@ -585,6 +587,13 @@ const CONFIG = {
     hint2DelayMs: 9000,      // when the "or tap ahead of yourself" nudge appears
     hint2VisibleMs: 9000,
     memoryVisibleMs: 7200,   // how long a found thing's name and line stay up
+
+    /* Being given a title or a cosmetic. Longer than a found memory on
+       purpose — it is the larger event of the two — and with a gap after it
+       wide enough for the two-and-a-half second fade to finish before
+       anything else is allowed on screen. */
+    riteVisibleMs: 8500,
+    riteGapMs: 2800,
     worldNameMs: 6800,       // ...and the name of a place you have arrived in
     sleepAfterSeconds: 600,  // ~10 minutes of stillness, then it dims itself
     sleepFadeSeconds: 50,
@@ -613,6 +622,40 @@ const CONFIG = {
     layerGain: 0.16,
     layerFadeSeconds: 7,     // a layer arriving must never be an event
     glideSeconds: 2.5,       // how long a world change takes to slide pitch
+
+    /* The chord, moving on. Every `driftSeconds` each layer steps to the next
+       degree of the world's scale and takes `driftGlideSeconds` to get there,
+       so the music is never where you left it and there is never a moment at
+       which it changed. Set driftSeconds to 0 to hold one voicing forever. */
+    driftSeconds: 52,
+    driftGlideSeconds: 14,
+
+    /* Stereo. `width` scales everything — 0 is mono — and `panSeconds` is how
+       long one voice takes to wander across its part of the field. Minutes, on
+       purpose: this is meant to stop the sound having a location, not to be
+       heard as movement. */
+    width: 0.55,
+    panSeconds: 105,
+
+    /* Timbre, as fallbacks. Each world names its own (see worlds.js):
+       `spread` is the chorus width in cents, `shimmer` how much of the
+       brighter of each layer's two voices is present, 0..1. */
+    spread: 8,
+    shimmer: 0.5,
+
+    /* The bells. `chimeGain` is the whole bus, so one number turns them down
+       against everything else; `chimeAttack` is long enough that no bell has
+       an edge on it, and `chimeSeconds` is the tail at the softest rarity —
+       rarer finds ring longer. */
+    chimeGain: 0.30,
+    chimeAttack: 0.09,
+    chimeSeconds: 6.5,
+    chimeBrightness: 3800,   // lowpass over the bells, in Hz. Lower is softer.
+
+    /* How far the pad closes down when the sleep fade is fully out, 0..1.
+       Lower is darker. Falling asleep to something should make it duller as
+       well as quieter. */
+    idleSettle: 0.42,
   },
 
   /* The slow colour drift. Every world's palette breathes between itself and
@@ -639,6 +682,9 @@ const CONFIG = {
       fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
       mengerDepth: 2, blockSegments: 3, cloudLayers: 3, kaleidoscope: true,
       charSegments: 22, charShadow: true, companion: true, sanctuaryExtras: true,
+      // how finely a memory's form is resolved — the vertex shader rewrites a
+      // sphere into it, so this is the one knob that costs per-vertex work
+      memoryDetail: 2,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
@@ -649,6 +695,7 @@ const CONFIG = {
       fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
       mengerDepth: 2, blockSegments: 2, cloudLayers: 2, kaleidoscope: true,
       charSegments: 16, charShadow: true, companion: true, sanctuaryExtras: true,
+      memoryDetail: 2,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
@@ -659,6 +706,7 @@ const CONFIG = {
       fractalDepth: 3, fractalInstances: 1400, structureScale: 0.6,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 1, kaleidoscope: false,
       charSegments: 11, charShadow: false, companion: true, sanctuaryExtras: true,
+      memoryDetail: 1,
       bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.2,
     },
     /* The floor. Meant for a phone that would rather stay cool than look its
@@ -675,6 +723,7 @@ const CONFIG = {
       fractalDepth: 3, fractalInstances: 900, structureScale: 0.45,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 0, kaleidoscope: false,
       charSegments: 9, charShadow: false, companion: false, sanctuaryExtras: false,
+      memoryDetail: 1,
       bloom: false, bloomScale: 0.30, msaa: 0, pixelRatio: 1.0,
     },
   },
@@ -815,14 +864,36 @@ function start() {
     analytics.track(EVENTS.collectionCompleted, { id: c.id, world: c.world });
   };
   archive.onUnlock = ({ type, id }) => {
+    analytics.track(EVENTS.cosmeticUnlocked, { type, id });
+
+    /* The monument changing shape is not a thing you wear and has nothing to
+       show as a badge — it is told in the world, by the monument. */
+    if (type === 'monument') {
+      const c = cosmetic(type, id);
+      if (c) ui.showMemory('the monument answers', c.name, c.note || '', 'dream');
+      return;
+    }
+
     const c = type === 'title' ? title(id) : cosmetic(type, id);
     if (!c) return;
-    const kind = type === 'title' ? 'new title'
-      : type === 'monument' ? 'the monument answers'
-      : `new ${type}`;
-    ui.showMemory(kind, c.name, c.note || '', 'dream');
-    analytics.track(EVENTS.cosmeticUnlocked, { type, id });
+
+    /* The ceremony. The line under the name is the *condition*, resolved from
+       the same table that granted the thing — so what it says earned it is
+       what earned it, and cannot drift into being decorative. */
+    const cond = earnedBy(type, id);
+    ui.showRite({
+      kind: type === 'title' ? 'a name you have earned' : `a ${type} you have earned`,
+      name: c.name,
+      why: describeEarn(cond, worldName) || c.note || '',
+      emblem: c.emblem,
+      weight: c.weight,
+    });
   };
+
+  /** a world key as the player knows it, for the lines under an honour */
+  function worldName(key) {
+    return WORLDS.find((w) => w.key === key)?.name || key;
+  }
   archive.onMastery = ({ world: key, at }) => {
     analytics.track(EVENTS.masteryReached, { world: key, at });
     if (at < 1) return;    // the quarters are told by what they unlock
@@ -1183,7 +1254,10 @@ function start() {
       { id: d.id, world: d.world, rarity: d.rarity });
     character.flare();
     companion?.notice(it.x, it.y, it.z);
-    // a rarer find brings the world up a layer with it
+    // the world says something back: a bell in the chord it is already
+    // playing, pitched and held by how rare the thing was
+    audio.chime(RARITY[d.rarity]?.chime ?? 0);
+    // ...and a rarer find brings the world up a layer with it
     if (RARITY[d.rarity]?.chime >= 2) audio.addLayer();
     // and the monument answers, since knowing a world is part of mastery
     content.setMasteryForm(archive.monumentForm(world.key));
@@ -1355,7 +1429,7 @@ function start() {
     if (!ui.transitioning) {
       content.updateAwakening(dt, rig.state.x, rig.state.z, (i, s) => {
         if (inSanctuary) return;      // nothing here sleeps, or is scored
-        audio.addLayer();
+        audio.addLayer(true);         // ...and it is heard arriving
         story.note('awaken');
         archive.noteAwakened(world.key, i, content.awake);
         analytics.track(EVENTS.structureAwakened, { world: world.key });

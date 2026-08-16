@@ -55,7 +55,8 @@ export const WORLDS = [
     water: null,
     stars: 0.22,
     fireflies: 1.0,
-    audio: { root: 130.81, scale: [0, 4, 7, 11, 14], brightness: 480 },
+    audio: { root: 130.81, scale: [0, 4, 7, 11, 14], brightness: 480,
+      spread: 7, shimmer: 0.62 },      // bright, narrow, morning
   },
 
   {
@@ -94,7 +95,8 @@ export const WORLDS = [
     water: { level: -2.2, size: 280 },   // pools in the lows, not an ocean
     stars: 0.62,
     fireflies: 0.8,
-    audio: { root: 110.0, scale: [0, 3, 7, 10, 12], brightness: 380 },
+    audio: { root: 110.0, scale: [0, 3, 7, 10, 12], brightness: 380,
+      spread: 12, shimmer: 0.42 },      // wide and hollow, like water
   },
 
   {
@@ -131,7 +133,8 @@ export const WORLDS = [
     water: null,
     stars: 0.10,
     fireflies: 1.4,
-    audio: { root: 98.0, scale: [0, 5, 7, 12, 17], brightness: 300 },
+    audio: { root: 98.0, scale: [0, 5, 7, 12, 17], brightness: 300,
+      spread: 16, shimmer: 0.28 },      // the darkest and the widest
   },
 
   {
@@ -168,7 +171,8 @@ export const WORLDS = [
     water: null,
     stars: 1.0,
     fireflies: 0.7,
-    audio: { root: 87.31, scale: [0, 2, 7, 9, 14], brightness: 340 },
+    audio: { root: 87.31, scale: [0, 2, 7, 9, 14], brightness: 340,
+      spread: 9, shimmer: 0.55 },       // low, clear, a long way off
   },
 ];
 
@@ -249,7 +253,8 @@ export const SANCTUARY = {
   water: null,
   stars: 0.32,
   fireflies: 0.55,
-  audio: { root: 146.83, scale: [0, 4, 7, 12, 16], brightness: 520 },
+  audio: { root: 146.83, scale: [0, 4, 7, 12, 16], brightness: 520,
+    spread: 5, shimmer: 0.70 },         // the highest and the most settled
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════

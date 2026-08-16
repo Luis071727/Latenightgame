@@ -7,6 +7,8 @@
  * the settings exist because volume and motion are the player's to decide;
  * everything else fades itself away as soon as it has been understood.
  */
+import { paintEmblem } from './shapes.js';
+
 export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityChange, onPaceChange, onReset }) {
   const hintEl = document.getElementById('hint');
   const hint2El = document.getElementById('hint2');
@@ -29,6 +31,11 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const labelKindEl = labelEl?.querySelector('.l-kind');
   const labelNameEl = labelEl?.querySelector('.l-name');
   const labelNoteEl = labelEl?.querySelector('.l-note');
+  const riteEl = document.getElementById('rite');
+  const riteEmblemEl = riteEl?.querySelector('.r-emblem');
+  const riteKindEl = riteEl?.querySelector('.r-kind');
+  const riteNameEl = riteEl?.querySelector('.r-name');
+  const riteWhyEl = riteEl?.querySelector('.r-why');
 
   let began = false;
   let dim = 1;                  // 1 = awake, 0 = fully asleep
@@ -49,6 +56,12 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   let memoryTimer = null;
 
   function nextMemory() {
+    /* A rite has the floor. Completing a set can produce a discovery, a
+       collection and an unlock in the same instant, and the unlock is the
+       largest of the three — it should not be racing the other two for the
+       screen. The notices simply wait; nothing is dropped. */
+    if (riteActive) { memoryTimer = setTimeout(nextMemory, 900); return; }
+
     const m = memoryQueue.shift();
     if (!m) { memoryTimer = null; return; }
 
@@ -68,6 +81,48 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
       memoryEl.classList.remove('show');
       memoryTimer = setTimeout(nextMemory, 1500);
     }, CONFIG.ui.memoryVisibleMs);
+  }
+
+  /* ── being given something ─────────────────────────────────────────────
+   *
+   * Its own queue, separate from the notices and ahead of them. Two honours
+   * landing together — which happens, since one find can complete a set and
+   * pass a mastery threshold at once — are shown one after the other rather
+   * than on top of each other, and neither is skipped: being given something
+   * twice at once should not mean being told about it once.
+   */
+  const riteQueue = [];
+  let riteTimer = null;
+  let riteActive = false;
+
+  function nextRite() {
+    const r = riteQueue.shift();
+    if (!r) {
+      riteTimer = null;
+      riteActive = false;
+      riteEl.setAttribute('aria-hidden', 'true');
+      // let whatever was waiting behind it through
+      if (!memoryTimer) nextMemory();
+      return;
+    }
+
+    riteActive = true;
+    paintEmblem(riteEmblemEl, r.emblem);
+    riteKindEl.textContent = r.kind;
+    riteNameEl.textContent = r.name;
+    riteWhyEl.textContent = r.why || '';
+    riteEl.className = r.weight || '';
+    riteEl.setAttribute('aria-hidden', 'false');
+    // reflow, so the class change and the show land as two separate states
+    void riteEl.offsetWidth;
+    riteEl.classList.add('show');
+
+    riteTimer = setTimeout(() => {
+      riteEl.classList.remove('show');
+      // long enough for the two-and-a-half second fade to finish before
+      // anything else is allowed to start
+      riteTimer = setTimeout(nextRite, CONFIG.ui.riteGapMs);
+    }, CONFIG.ui.riteVisibleMs);
   }
 
   // the walk-through-a-gate fade: up into soft light, swap, back down
@@ -330,6 +385,26 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
       if (!memoryTimer) nextMemory();
     },
 
+    /**
+     * Being given something — a title, a cloak, a companion.
+     *
+     * Deliberately not `showMemory`. A found memory is a thing that happened;
+     * an honour is a thing you were given, and telling them in the same corner
+     * notice made earning one feel like the same size of event as picking a
+     * flower. This takes the middle of the screen, names what earned it, and
+     * still asks nothing of anyone: no button, nothing to dismiss, no pause.
+     *
+     * @param r {{kind, name, why, emblem, weight}}
+     */
+    showRite(r) {
+      if (!riteEl) return;
+      riteQueue.push(r);
+      if (!riteTimer) nextRite();
+    },
+
+    /** true while an honour is being given, so nothing narrates over it */
+    get riteOpen() { return riteActive; },
+
     /** offer or withdraw the "step through" prompt by an open gate */
     setStepPrompt(visible) {
       stepEl.classList.toggle('show', !!visible);
@@ -366,7 +441,10 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
      */
     setLabel(what) {
       if (!labelEl) return;
-      if (!what) { labelEl.classList.remove('show'); return; }
+      // the sanctuary names whatever you are standing in front of continuously,
+      // which would sit straight through a rite; it comes back by itself the
+      // moment the rite is done, because this is driven by where you are
+      if (!what || riteActive) { labelEl.classList.remove('show'); return; }
       labelKindEl.textContent = what.kind;
       labelNameEl.textContent = what.name;
       labelNoteEl.textContent = what.note || '';

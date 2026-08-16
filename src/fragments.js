@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from './textures.js';
-import { discoveriesOf, RARITY } from './discoveries.js';
+import { discoveriesOf, RARITY, RARITY_ORDER } from './discoveries.js';
+import { FORM_GLSL, formAttributes } from './shapes.js';
 import { gateSpot } from './gate.js';
 
 /**
@@ -114,6 +115,11 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
       baseY: ground + D.hover,
       y: ground + D.hover,
       rarity: rar,
+      // which of the nine forms this one is, and the proportion that goes with
+      // it — read once here rather than looked up per frame
+      form: formAttributes(d.shape),
+      // 0..1 across the rarity ladder, for how hot its colour runs
+      heat: Math.max(0, RARITY_ORDER.indexOf(d.rarity)) / (RARITY_ORDER.length - 1),
       phase: Math.random() * Math.PI * 2,
       near: 0,          // 0..1, how aware of the player it is
       taking: 0,        // 0..1, the gathering animation
@@ -122,14 +128,37 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
     });
   }
 
-  /* ── the body: a small faceted thing, brighter than a mote ──────────── */
-  const geometry = new THREE.OctahedronGeometry(0.5, 0);
+  /* ── the body ─────────────────────────────────────────────────────────
+   *
+   * A sphere the vertex shader rewrites into whichever of the nine forms this
+   * memory is, so a rare find standing in the grass is a distinct object
+   * rather than another crystal — and the whole world still costs the same one
+   * draw call it did when every memory was the same octahedron. Giving each
+   * form its own mesh would have been simpler and would have multiplied the
+   * scene's draw calls by the size of the vocabulary.
+   *
+   * The detail comes down with the tier: the deform is per-vertex work, and a
+   * phone that is already choosing to look plainer should not be paying for a
+   * silhouette at full resolution.
+   */
+  const geometry = new THREE.IcosahedronGeometry(0.5, quality.memoryDetail ?? 2);
   const aTint = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
   const aGlow = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+  const aLon = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+  const aLat = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+  const aWarp = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
   aTint.setUsage(THREE.DynamicDrawUsage);
   aGlow.setUsage(THREE.DynamicDrawUsage);
+  // the form attributes are rewritten with the rest because the pack below
+  // shuffles items down as they are taken, so instance i is not always item i
+  aLon.setUsage(THREE.DynamicDrawUsage);
+  aLat.setUsage(THREE.DynamicDrawUsage);
+  aWarp.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('aTint', aTint);
   geometry.setAttribute('aGlow', aGlow);
+  geometry.setAttribute('aLon', aLon);
+  geometry.setAttribute('aLat', aLat);
+  geometry.setAttribute('aWarp', aWarp);
 
   const uniforms = { uFogDensity: { value: world.fog.density } };
 
@@ -139,6 +168,7 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     vertexShader: /* glsl */`
+      ${FORM_GLSL}
       attribute vec3 aTint;
       attribute float aGlow;
       varying vec3 vTint;
@@ -146,8 +176,12 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
       void main() {
         vTint = aTint;
         vGlow = aGlow;
-        vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        vec3 n = normalize(mat3(modelViewMatrix) * mat3(instanceMatrix) * normal);
+        vec3 form, nrm;
+        formOf(normalize(position), form, nrm);
+        // 0.5 keeps the reach the octahedron this replaced had, so every
+        // size, hover and halo number tuned against it still means what it did
+        vec4 mv = modelViewMatrix * instanceMatrix * vec4(form * 0.5, 1.0);
+        vec3 n = normalize(mat3(modelViewMatrix) * mat3(instanceMatrix) * nrm);
         vFacing = abs(n.z);
         vDepth = -mv.z;
         gl_Position = projectionMatrix * mv;
@@ -223,6 +257,18 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
   const dummy = new THREE.Object3D();
   const tint = new THREE.Color(world.palette.mote);
   const bright = new THREE.Color(world.palette.bloom);
+  /* Body colour, per item and carried on the item, since the pack below
+     shuffles them. The world still decides the palette — a memory belongs to
+     where it is — but a mythic sits at the hot end of it and a common at the
+     cool end, so rarity is legible before you are near enough to read
+     anything. Mixed when the mood drifts, never per frame. */
+  function mixTints() {
+    for (const it of items) {
+      it.body = (it.body || new THREE.Color())
+        .copy(tint).lerp(bright, 0.35 + 0.65 * it.heat);
+    }
+  }
+  mixTints();
   const live = [];
 
   let onFound = null;
@@ -244,6 +290,7 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
     setPalette(p) {
       if (p.mote) tint.set(p.mote);
       if (p.bloom) bright.set(p.bloom);
+      mixTints();
     },
 
     setFogDensity(d) { uniforms.uFogDensity.value = d; },
@@ -317,16 +364,27 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
         const power = it.rarity.glow * pulse * (0.55 + 0.9 * it.near)
                     * (1 + it.taking * 2.2);
 
+        const f = it.form;
         dummy.position.set(it.x, it.y, it.z);
         dummy.rotation.set(it.phase * 0.4, it.phase * 0.7, it.phase * 0.2);
-        dummy.scale.setScalar(it.scale);
+        // the form's own proportion, folded into the instance scale rather
+        // than into the shader — it is three multiplications on the CPU here
+        // against one per vertex there
+        dummy.scale.set(
+          it.scale * f.scale[0], it.scale * f.scale[1], it.scale * f.scale[2]);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
 
         aGlow.array[i] = power;
-        aTint.array[i * 3] = bright.r;
-        aTint.array[i * 3 + 1] = bright.g;
-        aTint.array[i * 3 + 2] = bright.b;
+        aTint.array[i * 3] = it.body.r;
+        aTint.array[i * 3 + 1] = it.body.g;
+        aTint.array[i * 3 + 2] = it.body.b;
+
+        aLon.array[i * 4] = f.lon[0]; aLon.array[i * 4 + 1] = f.lon[1];
+        aLon.array[i * 4 + 2] = f.lon[2]; aLon.array[i * 4 + 3] = f.lon[3];
+        aLat.array[i * 4] = f.lat[0]; aLat.array[i * 4 + 1] = f.lat[1];
+        aLat.array[i * 4 + 2] = f.lat[2]; aLat.array[i * 4 + 3] = f.lat[3];
+        aWarp.array[i * 2] = f.warp[0]; aWarp.array[i * 2 + 1] = f.warp[1];
 
         dummy.rotation.set(0, 0, 0);
         dummy.scale.setScalar(it.scale * D.glowRadius);
@@ -346,6 +404,9 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
         glowMesh.instanceMatrix.needsUpdate = true;
         aGlow.needsUpdate = true;
         aTint.needsUpdate = true;
+        aLon.needsUpdate = true;
+        aLat.needsUpdate = true;
+        aWarp.needsUpdate = true;
         gPower.needsUpdate = true;
         gTint.needsUpdate = true;
       }
@@ -357,7 +418,7 @@ export function createFragments({ CONFIG, quality, scene, world, terrain, archiv
         if (it.near < 0.15) continue;
         const dx = it.x - point.x, dy = it.y - point.y, dz = it.z - point.z;
         it.dist2 = dx * dx + dy * dy + dz * dz;
-        it.tint = bright;
+        it.tint = it.body;      // the ground is lit the colour the thing is
         it.vis = it.near;
         it.glow = it.rarity.glow * (0.5 + it.taking * 2);
         if (out.length < k) out.push(it);
