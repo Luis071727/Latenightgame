@@ -340,11 +340,24 @@
     transition: opacity 0.35s ease;
   }
   #panel.open { opacity: 1; pointer-events: auto; }
+  /* The card is taller than a short phone in portrait once the quality and
+     pace pickers are stacked, and its grid parent aligns to the *end* edge —
+     so anything that overflowed went off the top of the screen where it could
+     not be reached at all. That put "open the dream archive" and the reset
+     out of reach on exactly the devices this is built for.
+
+     dvh rather than vh: vh resolves against the largest viewport, i.e. with
+     the browser toolbar hidden, so a vh-sized card is taller than what you can
+     actually see whenever the toolbar is showing. */
   #panel-card {
     width: min(400px, calc(100vw - 28px));
+    max-height: 85dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     margin-bottom: max(16px, env(safe-area-inset-bottom));
     box-sizing: border-box;
-    padding: 22px 24px calc(14px + env(safe-area-inset-bottom) * 0.4);
+    padding: 22px 24px calc(22px + env(safe-area-inset-bottom) * 0.4);
     border-radius: 22px;
     background: var(--wash);
     border: 1px solid rgba(226, 214, 255, 0.14);
@@ -496,9 +509,12 @@
   }
   #journal.open { opacity: 1; pointer-events: auto; }
 
+  /* dvh, so the bottom of the card is not lost behind mobile browser chrome.
+     vh resolves against the viewport with the toolbar *hidden*, which on a
+     phone means the last rows of every tab sat underneath it. */
   #journal .j-card {
     width: min(560px, 100vw);
-    height: min(88vh, 900px);
+    height: min(88dvh, 900px);
     display: flex; flex-direction: column;
     box-sizing: border-box;
     border-radius: 26px 26px 0 0;
