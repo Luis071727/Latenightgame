@@ -104,6 +104,14 @@ const CONFIG = {
     lookRise: 1.35,          // ...and this high, i.e. just over their shoulder
     follow: 2.4,             // damping rate; lower = the view lags further
     lookFollow: 3.0,         // the gaze catches up faster than the body does
+    /* How quickly the view swings *around* the wanderer when they turn, as
+       opposed to how quickly it catches up when they walk away from it. Kept
+       well under `follow` on purpose: the camera should ease round behind a
+       turn rather than be dragged through it. `maxSwingLag` is the ceiling on
+       how far behind it may fall, so a determined spin can never leave the
+       figure out at the edge of the frame. */
+    rotateFollow: 1.5,       // damping rate of the orbit; lower = a lazier swing
+    maxSwingLag: 0.55,       // radians the view may trail the facing by, at most
     minClearance: 1.1,       // never let the camera sink into a rise behind us
     fovPortrait: 68,
     fovLandscape: 58,
@@ -339,8 +347,18 @@ const CONFIG = {
      setting writes: the ceilings scale but the character of the movement — the
      heavy coast, the capped turn — stays exactly what it was. `drive` shapes
      stick strength into travel: above 1 a light push mostly *turns* the
-     figure, so you can look around without gliding off. */
+     figure, so you can look around without gliding off.
+
+     `scheme` is the one to try first if the steering ever feels like work:
+
+       stable-relative  push a direction on screen and go that way. The basis
+                        is input.js's own frozen yaw, never the live camera, so
+                        the view swinging round behind a turn cannot move it.
+       heading          tank steering. Stick x turns, stick y goes. Nothing is
+                        camera-relative at all, which makes it the most
+                        predictable of the two for one thumb and no attention. */
   movement: {
+    scheme: 'stable-relative',   // 'stable-relative' | 'heading'
     maxSpeed: 2.5,           // units/sec, an unhurried walking pace
     accel: 14.0,             // units/sec² while the stick is fully over
     paceScale: 1.15,         // set from settings.pace via `paces` below
@@ -348,10 +366,35 @@ const CONFIG = {
     drive: 1.6,              // exponent on stick strength → forward push
     damping: 0.03,           // per-second velocity decay; you settle, not skid
     maxTurnSpeed: 1.7,       // radians/sec, hard ceiling
-    turnGain: 4.0,           // how eagerly the heading chases the stick
-    turnResponse: 7.0,       // damping rate of the turn itself
-    deadzone: 10,            // px of stick offset that does nothing
+    /* `turnGain` is how much of a heading error is asked for as turn rate, and
+       it is the number that decides whether a correction is a lean or a snap.
+       At the 4.0 it used to be, the ceiling above was reached by a heading
+       error of only 24° — so very nearly every correction was a full-rate
+       turn and there was no gentle part of the range at all. Low gain with a
+       high `turnResponse` is what eases: the rate asked for is small, and the
+       turn tracks it closely enough not to overshoot and hunt. */
+    turnGain: 2.1,           // how eagerly the heading chases the stick
+    turnResponse: 10.0,      // damping rate of the turn itself
+    deadzone: 16,            // px of stick offset that does nothing
+    angleHysteresis: 0.10,   // radians of thumb wobble that changes nothing
     stickRadius: 78,         // px from the origin that counts as fully over
+
+    /* How the steering basis keeps up with the wanderer. It is re-aligned
+       briskly once nobody is steering, and while they *are* steering it moves
+       at `basisEaseHeld` — slow enough that a sustained turn barely shifts it
+       and no gesture can be felt to drift, but not so slow that a very long
+       drag ends up steering against a basis from minutes ago. */
+    basisEase: 0.9,          // damping rate of the basis while idle
+    basisEaseHeld: 0.12,     // ...and while a finger is down. Keep this tiny.
+
+    /* The 'heading' scheme. `headingTurnArc` is how far off the current facing
+       a fully-over stick asks for — the turn rate that results is still the
+       capped, damped one above. `headingTurnDrive` is what a turn with no
+       forward at all is worth as strength, kept low so that turning on the
+       spot stays turning on the spot. */
+    headingTurnArc: 1.05,    // radians off the facing at full stick x
+    headingTurnDrive: 0.45,  // strength a pure turn asks for
+
     groundFollow: 7.0,       // how quickly the figure settles onto the ground
     edgeAt: 0.88,            // fraction of the world radius where it leans back
     edgePull: 9.0,           // units/sec² of that lean, at the very edge
@@ -641,10 +684,14 @@ function start() {
     }
   };
 
+  /* The steering never asks the camera which way is up — that was the whole
+     source of the drift, since the follow camera orbits as the wanderer turns.
+     It is handed the rig's own yaw instead: no bob, no look smoothing, nothing
+     that swings. */
   const input = createInput({
     CONFIG,
-    camera,
     domElement: renderer.domElement,
+    getHeading: () => rig.state.yaw,
     onWake: () => ui.wake(),
     onTap: (x, y) => ui.tapAt(x, y),
   });
@@ -771,6 +818,9 @@ function start() {
 
     // arrive out on the plaza, facing the monument in the middle
     rig.place(0, world.ground.plazaRadius * 2.4, 0);
+    // ...and "up the screen" means the way they are facing from the first
+    // frame, rather than easing over from however the last world was left
+    input.syncBasis();
     companion?.place(rig.state);
 
     // a first handful of motes already drifting, so the world is never empty
@@ -878,6 +928,7 @@ function start() {
     const at = { x: rig.state.x, z: rig.state.z, yaw: rig.state.yaw };
     loadWorld(worldIndex);
     rig.place(at.x, at.z, at.yaw);
+    input.syncBasis();
 
     resize();
   }
@@ -1187,6 +1238,14 @@ function start() {
     setTier(name) { applyQualityChoice(name); return tierName; },
     /** force the next quality step down, as the frame watcher would */
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
+    /** swap steering scheme live, e.g. __night.scheme('heading') */
+    scheme(name) {
+      if (name === 'stable-relative' || name === 'heading') {
+        CONFIG.movement.scheme = name;
+        input.syncBasis();
+      }
+      return CONFIG.movement.scheme;
+    },
     renderer, scene, camera, rig, terrain,
     get post() { return post; },
     get character() { return character; },

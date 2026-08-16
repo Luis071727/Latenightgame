@@ -35,6 +35,20 @@ export function createRig({ CONFIG, camera, terrain }) {
   // desired heading, refreshed by steer() and consumed by update()
   let wantX = 0, wantZ = 0, wantStrength = 0;
 
+  /* Where the camera thinks it is standing, as an angle round the wanderer.
+   *
+   * The camera used to be placed straight off `state.yaw`, which made one
+   * damping rate do two jobs: how quickly the view catches up when the figure
+   * walks away from it, and how quickly it swings round when the figure turns.
+   * Those want opposite answers — the first brisk, the second slow — and with
+   * one number you can only have the swing feel right by making the follow
+   * feel like a rubber band.
+   *
+   * So the orbit gets an angle of its own, eased at its own gentle rate, and
+   * the position damping is left to do only what it is good at.
+   */
+  let camYaw = 0;
+
   const forward = new THREE.Vector3();
   const camTarget = new THREE.Vector3();
   const lookTarget = new THREE.Vector3();
@@ -68,6 +82,7 @@ export function createRig({ CONFIG, camera, terrain }) {
       state.vx = 0; state.vz = 0; state.vYaw = 0; state.speed = 0;
       state.ground = terrain ? terrain.heightAt(x, z) : 0;
       state.y = state.ground;
+      camYaw = yaw;         // ...and the camera is already behind them
       started = false;      // let the camera snap in behind rather than fly there
     },
 
@@ -148,11 +163,26 @@ export function createRig({ CONFIG, camera, terrain }) {
        * Behind and a little above, with enough lag that a turn swings the
        * view around after the figure instead of with it. The look point runs
        * ahead of the wanderer so you see where you are going, not their back.
+       *
+       * The swing is deliberately slower than the follow, so that turning
+       * reads as the world easing round you rather than the camera being
+       * yanked. It is bounded as well as eased: a lag with no ceiling would
+       * let a determined spin leave the wanderer looking out of the side of
+       * the frame, and however gentle that is to arrive at, being unable to
+       * see the figure you are steering is not restful.
        */
+      camYaw = camYaw + wrapAngle(state.yaw - camYaw) * (1 - Math.exp(-K.rotateFollow * dt));
+      const lag = wrapAngle(state.yaw - camYaw);
+      if (Math.abs(lag) > K.maxSwingLag) {
+        camYaw = state.yaw - Math.sign(lag) * K.maxSwingLag;
+      }
+      const camFx = Math.sin(camYaw);
+      const camFz = -Math.cos(camYaw);
+
       camTarget.set(
-        state.x - forward.x * K.distance,
+        state.x - camFx * K.distance,
         state.y + K.height,
-        state.z - forward.z * K.distance
+        state.z - camFz * K.distance
       );
 
       // never let the follow point sink into a hillside behind us
@@ -161,10 +191,13 @@ export function createRig({ CONFIG, camera, terrain }) {
         if (camTarget.y < under) camTarget.y = under;
       }
 
+      // ...and the gaze lands ahead of the *camera's* idea of forward, not the
+      // figure's, or the look point would snap round the instant they turned
+      // and undo everything the eased orbit just bought
       lookTarget.set(
-        state.x + forward.x * K.lookAhead,
+        state.x + camFx * K.lookAhead,
         state.y + K.lookRise,
-        state.z + forward.z * K.lookAhead
+        state.z + camFz * K.lookAhead
       );
 
       if (!started) {
