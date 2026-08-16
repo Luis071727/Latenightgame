@@ -25,6 +25,10 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const beatEl = document.getElementById('beat');
   const beat1El = beatEl?.querySelector('.b1');
   const beat2El = beatEl?.querySelector('.b2');
+  const labelEl = document.getElementById('label');
+  const labelKindEl = labelEl?.querySelector('.l-kind');
+  const labelNameEl = labelEl?.querySelector('.l-name');
+  const labelNoteEl = labelEl?.querySelector('.l-note');
 
   let began = false;
   let dim = 1;                  // 1 = awake, 0 = fully asleep
@@ -56,10 +60,14 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
     void memoryEl.offsetWidth;
     memoryEl.classList.add('show');
 
+    // Long enough to actually read a name and a line of prose, which the old
+    // 4.6s was not — a found memory is the reward for the whole loop, and
+    // having it gone before you have taken it in is the worst possible moment
+    // to be hurried.
     memoryTimer = setTimeout(() => {
       memoryEl.classList.remove('show');
-      memoryTimer = setTimeout(nextMemory, 1700);
-    }, 4600);
+      memoryTimer = setTimeout(nextMemory, 1500);
+    }, CONFIG.ui.memoryVisibleMs);
   }
 
   // the walk-through-a-gate fade: up into soft light, swap, back down
@@ -299,7 +307,8 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
       worldNameTimer = setTimeout(() => {
         worldNameEl.textContent = name;
         worldNameEl.classList.add('show');
-        worldNameTimer = setTimeout(() => worldNameEl.classList.remove('show'), 5200);
+        worldNameTimer = setTimeout(
+          () => worldNameEl.classList.remove('show'), CONFIG.ui.worldNameMs);
       }, delayMs);
     },
 
@@ -345,6 +354,24 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
 
     hideBeat() {
       beatEl?.classList.remove('show');
+    },
+
+    /**
+     * Name whatever the wanderer is standing in front of, in the sanctuary.
+     *
+     * Not a notification: it is driven by where the player *is*, so it appears
+     * because they walked up to something and leaves because they walked away.
+     * That means it never queues, never interrupts, and cannot be missed by
+     * being somewhere else when it fired. Pass null to clear it.
+     */
+    setLabel(what) {
+      if (!labelEl) return;
+      if (!what) { labelEl.classList.remove('show'); return; }
+      labelKindEl.textContent = what.kind;
+      labelNameEl.textContent = what.name;
+      labelNoteEl.textContent = what.note || '';
+      labelEl.classList.toggle('empty', !!what.empty);
+      labelEl.classList.add('show');
     },
 
     /** true while the settings card is up — nothing should narrate over it */

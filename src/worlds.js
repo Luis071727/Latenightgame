@@ -229,6 +229,9 @@ export const SANCTUARY = {
   ground: {
     profile: 'plaza',
     radius: 76, amp: 0.42, freq: 0.020, plazaRadius: 22,
+    // just outside the gallery ring rather than the usual plazaRadius * 2.4,
+    // so you arrive with your own memories close enough to be objects
+    spawnRadius: 39,
     rim: 3.2, drop: 20, ambient: 0.74,
     courtScale: 1.5,       // the level middle, as a multiple of plazaRadius
     terraceWidth: 9.5,     // how far out one tread runs

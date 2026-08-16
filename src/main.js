@@ -86,9 +86,9 @@ const CONFIG = {
      * must never be something you can catch happening, and a scene that
      * visibly gets darker as you approach it would be worse than the blowout.
      */
-    adaptFrom: 2.2,          // scene load below this changes nothing at all
-    adaptStrength: 0.085,    // how hard it stops down past that
-    adaptFloor: 0.72,        // ...and the very furthest it may ever close
+    adaptFrom: 1.6,          // scene load below this changes nothing at all
+    adaptStrength: 0.13,     // how hard it stops down past that
+    adaptFloor: 0.62,        // ...and the very furthest it may ever close
     adaptDown: 0.55,         // damping rate closing; slow
     adaptUp: 0.28,           // ...and slower still opening back up
   },
@@ -202,7 +202,7 @@ const CONFIG = {
 
     /* The chest light answers what is happening: it flares when a mote is
        gathered and breathes when a gate stands open ahead. */
-    glowGather: 0.85,        // extra brightness on gathering, decaying away
+    glowGather: 0.50,        // extra brightness on gathering, decaying away
     glowGatherDecay: 1.6,    // ...per second
     glowGatePulse: 0.30,     // depth of the breathing near an open gate
     glowGateSpeed: 1.5,
@@ -279,8 +279,19 @@ const CONFIG = {
     size: 0.44,
     glow: 1.00,              // emissive multiplier; much past ~1.6 clips to white
     glowRadius: 3.0,         // halo card size, relative to the mote
-    glowPower: 0.26,
-    gatheredGlow: 1.35,      // a mote brightens once it is following you
+    glowPower: 0.22,
+    /* A gathered mote used to brighten. It should not: it is now the closest
+       thing in the scene to the lens, it has already been won, and the free
+       one still out in the field is the thing worth looking at. Under 1 it
+       settles back rather than announcing itself. */
+    gatheredGlow: 0.90,
+
+    /* Halo cards fade toward `nearFadeFloor` as they approach the lens. A
+       mote a few metres from the camera covers a huge share of the screen, and
+       the gathered ring orbits exactly there. Distant motes are untouched. */
+    nearFadeFrom: 2.0,       // fully faded at this depth...
+    nearFadeTo: 11.0,        // ...and completely itself again by this one
+    nearFadeFloor: 0.30,     // how much of its light a mote at the lens keeps
 
     /* Crowding. A dozen gathered motes orbit the wanderer in a ring, and a
        dozen overlapping additive cards centred on the figure you are steering
@@ -288,8 +299,8 @@ const CONFIG = {
        nothing — the ordinary handful must look exactly as it always did — and
        past that the total eases off instead of stacking. */
     crowdRadius: 9,          // how near counts as being in the same glare
-    crowdFree: 4,            // this many cost nothing at all...
-    crowdSoften: 0.085,      // ...and each one past it takes a little off
+    crowdFree: 3,            // this many cost nothing at all...
+    crowdSoften: 0.14,       // ...and each one past it takes a little off
     bob: 0.55,               // how far a free mote drifts up and down
     drag: 0.50,              // per-second velocity decay back to stillness
 
@@ -379,13 +390,25 @@ const CONFIG = {
     bob: 0.22,
     // These are the subject of the room, not scenery in it, so they are
     // deliberately larger than the fragments they were found as.
-    foundScale: 1.9,
+    foundScale: 2.3,
     rarityPush: 4.2,         // how much further out a rare thing stands...
     rarityRise: 1.5,         // ...and how much higher
     glowRadius: 3.8,
-    glowPower: 0.34,
-    emptySize: 0.30,         // an unfound place: small...
-    emptyGlow: 0.26,         // ...and barely lit, but never absent
+    glowPower: 0.38,
+    emptySize: 0.44,         // an unfound place: small...
+    emptyGlow: 0.34,         // ...and barely lit, but never absent
+
+    /* Walking up to one. The gallery used to be a diorama — things stood in it
+       and none of them acknowledged you or said what they were, so a room full
+       of your own history read as decoration. `nearRadius` is where a memory
+       starts to notice you and `readRadius` is where it says its name, and the
+       gap between them matters: the first is what tells you it can be
+       approached, the second is the reward for having done it. */
+    nearRadius: 13,          // it starts to notice you from here...
+    readRadius: 5.5,         // ...and names itself once you are this close
+    nearRise: 0.75,          // how far it lifts as you come up to it
+    nearSwell: 0.28,         // ...how much larger it stands
+    nearGlow: 0.85,          // ...and how much brighter it burns
     // ...and the same crowding relief the motes get, because a finished
     // world's arc is a dozen lit haloes standing side by side
     crowdFree: 10,
@@ -535,8 +558,18 @@ const CONFIG = {
      point at which it accepts that the player is fine and stops offering.
      Turning `whispers` off leaves the beats and removes the nudging entirely. */
   story: {
-    holdSeconds: 7.5,          // how long a passage stays up of its own accord
-    minHoldSeconds: 2.0,       // ...and the least it stays before moving skips it
+    /* How long a passage stays is worked out from how long it is, not fixed.
+       It used to be a flat two-second floor before movement could dismiss one
+       — and since the player is moving essentially all of the time, that meant
+       every passage in the game lasted two seconds however much of it there
+       was. Nowhere near long enough to read two lines. These are once-ever, so
+       there is no second chance at them, and erring long costs nothing.
+
+       Roughly: a 24-word beat gets about eleven seconds before moving will
+       take it away, and about fourteen if you stand still. */
+    readBase: 2.4,             // seconds before the first word is counted...
+    readPerWord: 0.38,         // ...and how long each word is given after that
+    lingerSeconds: 3.0,        // how much longer it stays if nobody moves at all
     gapSeconds: 3.5,           // enforced quiet between one passage and the next
 
     whispers: true,
@@ -551,6 +584,8 @@ const CONFIG = {
     hintDelayMs: 2600,
     hint2DelayMs: 9000,      // when the "or tap ahead of yourself" nudge appears
     hint2VisibleMs: 9000,
+    memoryVisibleMs: 7200,   // how long a found thing's name and line stay up
+    worldNameMs: 6800,       // ...and the name of a place you have arrived in
     sleepAfterSeconds: 600,  // ~10 minutes of stillness, then it dims itself
     sleepFadeSeconds: 50,
     wakeFadeSeconds: 2.5,
@@ -869,6 +904,7 @@ function start() {
   let fragments = null;
   let ambience = null;         // drift, silhouettes, curtains — scenery only
   let display = null;          // the memories standing up, in the sanctuary
+  let readingSlot = null;      // the memory being stood in front of, if any
   let inSanctuary = false;
   let returnTo = 0;            // the world the sanctuary's gate returns to
   let delivered = 0;
@@ -889,6 +925,8 @@ function start() {
     if (fragments) fragments.dispose();
     if (ambience) ambience.dispose();
     if (display) { display.dispose(); display = null; }
+    readingSlot = null;
+    ui.setLabel(null);
 
     terrain.build(world);
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
@@ -987,8 +1025,12 @@ function start() {
     if (water) { water.dispose(); water = null; }
     if (world.water) water = createWater({ CONFIG, quality, scene, renderer, world });
 
-    // arrive out on the plaza, facing the monument in the middle
-    rig.place(0, world.ground.plazaRadius * 2.4, 0);
+    /* Arrive out on the plaza, facing the monument in the middle — or, at
+       home, close enough to the gallery to see that it is made of things.
+       Landing at the usual distance put the whole of it twenty metres off,
+       which is exactly far enough for a room of your own history to read as
+       scenery on the horizon. */
+    rig.place(0, world.ground.spawnRadius ?? world.ground.plazaRadius * 2.4, 0);
     // ...and "up the screen" means the way they are facing from the first
     // frame, rather than easing over from however the last world was left
     input.syncBasis();
@@ -1241,6 +1283,11 @@ function start() {
   /* What the dream can see of where the player is up to. Filled in each frame
      and handed to story.update — one reused object, because this is per-frame
      and a fresh one would be sixty allocations a second to describe a mood. */
+  /** the display name of a world, for the sanctuary's labels */
+  function worldName(key) {
+    return WORLDS.find((w) => w.key === key)?.name ?? key;
+  }
+
   const situation = {
     began: false, transitioning: false, menuOpen: false, moving: false,
     inSanctuary: false, gateEnterable: false, gateNear: false,
@@ -1389,7 +1436,38 @@ function start() {
 
     // the memories this world is still holding, and how near we are to one
     if (!ui.transitioning) fragments?.update(dt, ctx, rig.state);
-    display?.update(dt, ctx);
+    display?.update(dt, ctx, rig.state);
+
+    /* ── what you are standing in front of, at home ────────────────────
+     * Proximity, not a notification: it appears because the player walked up
+     * to a memory and goes when they walk away, so nothing queues and nothing
+     * can be missed by being elsewhere when it fired. An empty place names
+     * itself too — as the world it belongs to, never as the thing it is
+     * waiting for, because a gap that tells you its answer stops being one.
+     */
+    if (display && !ui.transitioning) {
+      const at = display.readingAt(rig.state.x, rig.state.z);
+      if (at !== readingSlot) {
+        readingSlot = at;
+        if (!at) {
+          ui.setLabel(null);
+        } else if (at.found) {
+          ui.setLabel({
+            kind: `a memory of ${worldName(at.world)}`,
+            name: at.name, note: at.note,
+          });
+        } else {
+          ui.setLabel({
+            kind: 'an empty place', empty: true,
+            name: `something from ${worldName(at.world)}`,
+            note: 'Still out there. It will stand here when you find it.',
+          });
+        }
+      }
+    } else if (readingSlot) {
+      readingSlot = null;
+      ui.setLabel(null);
+    }
 
     companion?.update(dt, ctx, rig.state, gate);
 

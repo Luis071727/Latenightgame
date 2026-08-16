@@ -99,7 +99,7 @@
     transition: opacity 3.5s ease;
     text-shadow: 0 0 18px rgba(200, 178, 255, 0.22);
   }
-  #hint2.show { opacity: 0.5; }
+  #hint2.show { opacity: 0.8; }
 
   /* the name of the world you have just arrived in */
   #worldname {
@@ -109,12 +109,12 @@
     font: 300 clamp(17px, 2.4vw, 21px)/1.4 var(--serif);
     font-style: italic;
     letter-spacing: 0.30em; text-transform: lowercase;
-    color: var(--ink-soft);
+    color: var(--ink);
     opacity: 0; pointer-events: none;
-    transition: opacity 2.8s ease;
-    text-shadow: 0 0 22px var(--glow);
+    transition: opacity 2.4s ease;
+    text-shadow: 0 0 3px rgba(8,6,16,0.9), 0 0 22px var(--glow);
   }
-  #worldname.show { opacity: 0.78; }
+  #worldname.show { opacity: 0.95; transition: opacity 1.0s ease; }
 
   /* The dream saying something.
      Deliberately the quietest thing on the screen and the lowest — the world
@@ -126,34 +126,87 @@
      it safe under reduced motion rather than merely tolerable. */
   #beat {
     position: fixed; left: 0; right: 0;
-    bottom: max(21vh, calc(env(safe-area-inset-bottom) + 138px));
+    bottom: max(20vh, calc(env(safe-area-inset-bottom) + 132px));
     text-align: center;
-    padding: 0 28px;
+    padding: 16px 20px;
     opacity: 0; pointer-events: none;
-    transition: opacity 2.2s ease;
+    /* fading out is the slow, gentle one; fading *in* is not, because every
+       second spent arriving is a second of a once-ever passage that could not
+       yet be read. The .show rule wins on the way in, this one on the way out. */
+    transition: opacity 2.0s ease;
   }
-  #beat.show { opacity: 0.72; }
+  #beat.show { opacity: 1; transition: opacity 0.85s ease; }
   #beat .b1, #beat .b2 {
-    max-width: 30ch;
+    max-width: 28ch;
     margin: 0 auto;
-    font: 300 clamp(13px, 1.9vw, 15.5px)/1.75 var(--serif);
+    font: 300 clamp(15px, 2.5vw, 18px)/1.7 var(--serif);
     font-style: italic;
-    letter-spacing: 0.055em;
-    color: var(--ink-soft);
-    text-shadow: 0 0 20px var(--glow);
+    letter-spacing: 0.035em;
+    color: #f2ecff;
+    /* A dark halo rather than a box. The world behind this can be anything
+       from near-black fog to a clearing full of woken light, and pale italic
+       text over the second was unreadable — but a panel would make the passage
+       an interface element sitting on top of the game rather than part of it.
+       Layered shadows darken just the pixels immediately around each letter. */
+    text-shadow:
+      0 0 3px rgba(8, 6, 16, 0.95),
+      0 0 10px rgba(8, 6, 16, 0.85),
+      0 1px 2px rgba(8, 6, 16, 0.9),
+      0 0 26px var(--glow);
   }
   /* the second line is the one that usually does the teaching, and reads as
      an afterthought rather than an instruction because of it */
-  #beat .b2 { margin-top: 3px; color: var(--ink-faint); }
+  #beat .b2 { margin-top: 5px; color: #d9cfee; }
   #beat .b2:empty { display: none; }
 
   /* Reduced motion, from the OS or from the settings panel. The fade is what
      it is — a cross-fade of text is not vestibular — but it is shortened so
      the passage simply appears and goes rather than drifting in. */
   @media (prefers-reduced-motion: reduce) {
-    #beat { transition-duration: 0.5s; }
+    #beat, #beat.show { transition-duration: 0.5s; }
   }
-  body.reduced-motion #beat { transition-duration: 0.5s; }
+  body.reduced-motion #beat,
+  body.reduced-motion #beat.show { transition-duration: 0.5s; }
+
+  /* What you are standing in front of, in the sanctuary.
+     The gallery used to be a diorama: things stood in it and none of them
+     would tell you what they were, so a room full of your own history read as
+     decoration. This is the other half of walking up to one. It follows
+     proximity rather than being a notification — it appears because you are
+     there and leaves because you left, so nothing is queued and nothing is
+     missed. */
+  #label {
+    position: fixed; left: 0; right: 0;
+    top: max(21vh, calc(env(safe-area-inset-top) + 116px));
+    text-align: center; padding: 0 28px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.9s ease;
+  }
+  #label.show { opacity: 1; transition: opacity 0.55s ease; }
+  #label .l-kind {
+    font: 300 10px/1.6 var(--sans);
+    letter-spacing: 0.42em; text-transform: uppercase;
+    color: rgba(240, 228, 255, 0.62);
+    text-shadow: 0 0 3px rgba(8,6,16,0.95), 0 0 8px rgba(8,6,16,0.8);
+  }
+  #label .l-name {
+    margin-top: 5px;
+    font: 300 clamp(19px, 3.2vw, 24px)/1.35 var(--serif);
+    letter-spacing: 0.10em;
+    color: #fff4e4;
+    text-shadow: 0 0 4px rgba(8,6,16,0.95), 0 0 12px rgba(8,6,16,0.8), 0 0 26px var(--glow);
+  }
+  #label .l-note {
+    margin-top: 7px;
+    font: 300 13px/1.7 var(--sans); font-style: italic;
+    letter-spacing: 0.05em;
+    color: #e8dffb;
+    text-shadow: 0 0 3px rgba(8,6,16,0.95), 0 0 9px rgba(8,6,16,0.8);
+    max-width: 30ch; margin-left: auto; margin-right: auto;
+  }
+  #label .l-note:empty { display: none; }
+  /* an empty place is named in a dimmer, cooler voice than one that is yours */
+  #label.empty .l-name { color: #cfc6e4; text-shadow: 0 0 4px rgba(8,6,16,0.95), 0 0 10px rgba(8,6,16,0.8); }
 
   /* offered when standing before an open gate, so travel never depends on
      hitting an exact radius while moving */
@@ -186,9 +239,9 @@
     top: max(16vh, calc(env(safe-area-inset-top) + 84px));
     text-align: center; padding: 0 28px;
     opacity: 0; pointer-events: none;
-    transition: opacity 1.6s ease;
+    transition: opacity 1.4s ease;
   }
-  #memory.show { opacity: 1; }
+  #memory.show { opacity: 1; transition: opacity 0.6s ease; }
   #memory .kind {
     font: 300 10px/1.6 var(--sans);
     letter-spacing: 0.42em; text-transform: uppercase;
@@ -196,16 +249,17 @@
   }
   #memory .name {
     margin-top: 5px;
-    font: 300 clamp(20px, 3.4vw, 26px)/1.35 var(--serif);
+    font: 300 clamp(21px, 3.6vw, 27px)/1.35 var(--serif);
     letter-spacing: 0.10em;
-    color: var(--ink);
-    text-shadow: 0 0 26px var(--glow);
+    color: #fff6e8;
+    text-shadow: 0 0 4px rgba(8,6,16,0.95), 0 0 12px rgba(8,6,16,0.8), 0 0 26px var(--glow);
   }
   #memory .note {
-    margin-top: 7px;
-    font: 300 12.5px/1.65 var(--sans);
+    margin-top: 8px;
+    font: 300 13.5px/1.7 var(--sans);
     letter-spacing: 0.05em;
-    color: var(--ink-soft);
+    color: #ede5ff;
+    text-shadow: 0 0 3px rgba(8,6,16,0.95), 0 0 9px rgba(8,6,16,0.8);
     max-width: 30ch; margin-left: auto; margin-right: auto;
     font-style: italic;
   }
@@ -757,6 +811,14 @@
   <div class="kind"></div>
   <div class="name"></div>
   <div class="note"></div>
+</div>
+
+<!-- what the wanderer is standing in front of, in the sanctuary. Shows while
+     you are near a memory and goes when you walk away. -->
+<div id="label" aria-live="polite">
+  <div class="l-kind"></div>
+  <div class="l-name"></div>
+  <div class="l-note"></div>
 </div>
 
 <!-- the dream, saying something. Low in the frame, under everything the

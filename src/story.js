@@ -158,7 +158,25 @@ export function createStory({ CONFIG, archive, ui }) {
 
   let showing = null;       // the id currently on screen, or null
   let held = 0;             // how long it has been up
+  let readFor = 0;          // ...and how long this particular passage needs
   let gap = 0;              // enforced quiet after one goes away
+
+  /**
+   * How long this passage needs to be on screen before anything may take it
+   * away, from how much of it there is.
+   *
+   * A flat floor was wrong, and wrong in the worst direction. Moving dismisses
+   * a beat, the floor under that was two seconds, and the player is moving
+   * essentially all of the time — so in practice every passage in the game
+   * lasted two seconds regardless of length, which is not enough to read one
+   * line let alone two. These are once-ever: there is no second chance at
+   * them, and erring long costs nothing but a few seconds of somebody already
+   * being told they are in no hurry.
+   */
+  function readingTime(lines) {
+    const words = lines.join(' ').trim().split(/\s+/).filter(Boolean).length;
+    return S.readBase + words * S.readPerWord;
+  }
 
   /* the whisper's book-keeping */
   let sinceProgress = 0;    // since anything at all was achieved
@@ -297,6 +315,8 @@ export function createStory({ CONFIG, archive, ui }) {
 
     /** what is on screen, if anything — for the console */
     get saying() { return showing; },
+    /** how the current passage is doing against its clock, for tuning */
+    get timing() { return { showing, held, readFor, gap, queued: queue.length }; },
 
     /**
      * @param s a reused situation object from the main loop: began,
@@ -311,9 +331,10 @@ export function createStory({ CONFIG, archive, ui }) {
       /* ── something is on screen ─────────────────────────────────────── */
       if (showing) {
         held += dt;
-        // moving puts it away, but never before it could have been read
-        const skipped = s.moving && held > S.minHoldSeconds;
-        if (held > S.holdSeconds || skipped || !canSpeak(s)) {
+        // moving puts it away, but never before it could have been read —
+        // and what "read" means depends on how long the passage is
+        const skipped = s.moving && held > readFor;
+        if (held > readFor + S.lingerSeconds || skipped || !canSpeak(s)) {
           ui.hideBeat();
           showing = null;
           held = 0;
@@ -329,6 +350,7 @@ export function createStory({ CONFIG, archive, ui }) {
       if (queue.length) {
         showing = queue.shift();
         held = 0;
+        readFor = readingTime(BEATS[showing]);
         ui.showBeat(BEATS[showing]);
         return;
       }
@@ -362,6 +384,7 @@ export function createStory({ CONFIG, archive, ui }) {
 
       showing = `whisper:${id}`;
       held = 0;
+      readFor = readingTime([WHISPERS[id]]);
       ui.showBeat([WHISPERS[id]]);
     },
   };
