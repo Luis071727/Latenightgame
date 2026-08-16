@@ -6,6 +6,7 @@ import { createWater } from './water.js';
 import { createMotes } from './motes.js';
 import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
+import { createAmbience } from './ambience.js';
 import { createTerrain } from './terrain.js';
 import { WORLDS, SANCTUARY, createWorldContent, makePaletteCycler } from './worlds.js';
 import { createGate } from './gate.js';
@@ -21,6 +22,7 @@ import { createArchive } from './archive.js';
 import { createFragments } from './fragments.js';
 import { createJournal } from './journal.js';
 import { createSanctuaryDisplay } from './sanctuary.js';
+import { createStory, BEATS as STORY_BEATS } from './story.js';
 import { createAnalytics, EVENTS } from './analytics.js';
 import { createProfileService, createLeaderboardService } from './leaderboard.js';
 import { RARITY, title, cosmetic, applyVariant } from './discoveries.js';
@@ -66,14 +68,45 @@ const CONFIG = {
   render: {
     exposure: 0.95,          // low on purpose — this is for a dark room
     maxPixelRatio: 2,        // mobile GPUs hate 3x
+
+    /* Adaptive exposure — the eye adjusting, not an effect.
+     *
+     * Walking into a clearing where everything is awake and a dozen motes are
+     * in tow used to clip the frame to white, and you could no longer see
+     * where you were going. This stops the aperture down a touch when that
+     * happens and opens it again when you leave.
+     *
+     * The brightness is estimated from the light list the ground shader is
+     * already given each frame rather than read back off the GPU. A readback
+     * — even of one pixel — stalls the pipeline, and a stutter in service of
+     * a slow, subtle grade is a bad trade on a mid phone. The estimate does
+     * not have to be right; it has to be smooth and in the right direction.
+     *
+     * `adaptFloor` is the important one. It is deliberately close to 1: this
+     * must never be something you can catch happening, and a scene that
+     * visibly gets darker as you approach it would be worse than the blowout.
+     */
+    adaptFrom: 2.2,          // scene load below this changes nothing at all
+    adaptStrength: 0.085,    // how hard it stops down past that
+    adaptFloor: 0.72,        // ...and the very furthest it may ever close
+    adaptDown: 0.55,         // damping rate closing; slow
+    adaptUp: 0.28,           // ...and slower still opening back up
   },
 
-  // Kept deliberately soft. Raising `strength` past ~0.9 starts to look like
-  // a lens effect rather than light.
+  /* Kept deliberately soft. Raising `strength` past ~0.9 starts to look like
+     a lens effect rather than light.
+
+     `threshold` is the readability knob. At the 0.62 it sat at, a halo card
+     overlapping an awakened tip cluster crossed it easily, so the bloom was
+     spreading every soft edge in the frame rather than the few things that are
+     genuinely bright — and a clearing full of woken structures clipped to
+     white. Up at 0.88 only the cores go, which is what bloom is for: the light
+     still blooms, the fog around it no longer does. `strength` is nudged up a
+     little to keep those cores looking the same as they did. */
   bloom: {
-    strength: 0.48,
+    strength: 0.54,
     radius: 0.62,
-    threshold: 0.62,
+    threshold: 0.88,
   },
 
   vignette: { amount: 0.85, radius: 0.80, softness: 0.58, dither: 1.0 },
@@ -104,6 +137,14 @@ const CONFIG = {
     lookRise: 1.35,          // ...and this high, i.e. just over their shoulder
     follow: 2.4,             // damping rate; lower = the view lags further
     lookFollow: 3.0,         // the gaze catches up faster than the body does
+    /* How quickly the view swings *around* the wanderer when they turn, as
+       opposed to how quickly it catches up when they walk away from it. Kept
+       well under `follow` on purpose: the camera should ease round behind a
+       turn rather than be dragged through it. `maxSwingLag` is the ceiling on
+       how far behind it may fall, so a determined spin can never leave the
+       figure out at the edge of the frame. */
+    rotateFollow: 1.5,       // damping rate of the orbit; lower = a lazier swing
+    maxSwingLag: 0.55,       // radians the view may trail the facing by, at most
     minClearance: 1.1,       // never let the camera sink into a rise behind us
     fovPortrait: 68,
     fovLandscape: 58,
@@ -117,7 +158,7 @@ const CONFIG = {
   character: {
     scale: 1.0,
     ambient: 0.72,           // how much of the sky the robe catches
-    glow: 1.15,              // brightness of the light at the chest
+    glow: 1.00,              // brightness of the light at the chest
     glowSize: 0.30,
     bob: 0.042,              // vertical float, in units
     bobSpeed: 1.15,          // ...and its rate, per second
@@ -207,7 +248,13 @@ const CONFIG = {
   /* The ground shader. `lights` is a shader constant: changing it recompiles. */
   ground: {
     lights: 6,               // nearest motes that light the ground
-    lightPower: 3.2,
+    lightPower: 2.5,
+    /* What all six of them together may add up to, at most. The sum is soft-
+       clamped rather than cut — see the fragment shader in terrain.js — so a
+       quiet world is completely unaffected and a blazing one bends over toward
+       this instead of running away to white. This is what guarantees the
+       ground under the wanderer stays readable however much is awake. */
+    lightClamp: 1.35,
     grain: 0.028,            // per-pixel surface grain, as a normal slope
     detailFade: 0.045,       // how quickly the grain fades with distance
   },
@@ -230,10 +277,19 @@ const CONFIG = {
      have to arrive for the monument to be full. */
   motes: {
     size: 0.44,
-    glow: 1.20,              // emissive multiplier; much past ~1.6 clips to white
+    glow: 1.00,              // emissive multiplier; much past ~1.6 clips to white
     glowRadius: 3.0,         // halo card size, relative to the mote
-    glowPower: 0.32,
-    gatheredGlow: 1.55,      // a mote brightens once it is following you
+    glowPower: 0.26,
+    gatheredGlow: 1.35,      // a mote brightens once it is following you
+
+    /* Crowding. A dozen gathered motes orbit the wanderer in a ring, and a
+       dozen overlapping additive cards centred on the figure you are steering
+       is the single worst blowout in the game. `crowdFree` of them cost
+       nothing — the ordinary handful must look exactly as it always did — and
+       past that the total eases off instead of stacking. */
+    crowdRadius: 9,          // how near counts as being in the same glare
+    crowdFree: 4,            // this many cost nothing at all...
+    crowdSoften: 0.085,      // ...and each one past it takes a little off
     bob: 0.55,               // how far a free mote drifts up and down
     drag: 0.50,              // per-second velocity decay back to stillness
 
@@ -263,7 +319,7 @@ const CONFIG = {
   awaken: {
     radius: 8.0,             // how close is close enough
     bloomSeconds: 5.5,       // how long it takes to come fully alight
-    lightPower: 2.4,         // what an awake structure does to the ground
+    lightPower: 1.7,         // what an awake structure does to the ground
     lightRange: 32,
     gateAt: 0.18,            // fraction awake before the gate is fully open
   },
@@ -301,17 +357,24 @@ const CONFIG = {
     takeRadius: 2.6,         // walk this close and it comes to you
     takeSeconds: 1.15,       // how long the taking itself lasts
     glowRadius: 3.4,         // halo size, relative to the body
-    glowPower: 0.40,
+    glowPower: 0.34,
     noticeSeconds: 3.0,      // how long the companion stays interested
   },
 
-  /* The sanctuary's gallery: thirty-two places in four arcs, one arc per
-     world. A found memory burns in its place; an unfound one stays as a dim,
-     empty socket, which is the half of this that actually does the work — a
-     room with gaps in it is a room you want to fill. */
+  /* The sanctuary. Four things stand in it, and between them they answer what
+     have I found, how far have I come, where have I been, and how much of each
+     place is mine — see the head of sanctuary.js.
+
+     The gallery is forty-eight places in four arcs, one arc per world, laid in
+     two rows because a dozen in a single row is a picket fence. A found memory
+     burns in its place; an unfound one stays as a dim, empty socket, which is
+     the half of this that actually does the work — a room with gaps in it is a
+     room you want to fill. */
   sanctuary: {
-    radius: 26,              // how far the ring of memories stands from the middle
-    arc: 1.30,               // radians one world's eight spread across
+    radius: 26,              // how far the near row of memories stands out
+    rows: 2,                 // ...and how many rows a world's arc is laid in
+    rowGap: 4.6,             // how much further out the second row sits
+    arc: 1.42,               // radians one world's dozen spread across
     lift: 2.0,               // how high they float
     bob: 0.22,
     // These are the subject of the room, not scenery in it, so they are
@@ -320,9 +383,39 @@ const CONFIG = {
     rarityPush: 4.2,         // how much further out a rare thing stands...
     rarityRise: 1.5,         // ...and how much higher
     glowRadius: 3.8,
-    glowPower: 0.42,
+    glowPower: 0.34,
     emptySize: 0.30,         // an unfound place: small...
     emptyGlow: 0.26,         // ...and barely lit, but never absent
+    // ...and the same crowding relief the motes get, because a finished
+    // world's arc is a dozen lit haloes standing side by side
+    crowdFree: 10,
+    crowdSoften: 0.016,
+
+    /* The cairn: one stone per memory kept, spiralling up around the monument
+       and tapering as it climbs. `max` is what a complete journey builds, so
+       it wants to stay in step with the total number of discoveries — past it
+       the tower simply stops growing rather than running off up the sky. */
+    cairn: {
+      max: 48, radius: 7.4, taper: 0.58, rise: 9.0, lift: 0.6,
+      stone: 0.86, glow: 0.30,
+    },
+
+    /* The four world marks: a standing stone per world, at the head of its
+       arc. `stub` is how much of one is showing before you have ever been
+       there — never nothing, because an absent mark is a missing world rather
+       than an unvisited one. */
+    marks: {
+      radius: 16.5, width: 1.05, height: 6.4, stub: 0.22,
+      rise: 1.6, lift: 0, glow: 0.55,
+    },
+
+    /* The constellations: `count` stars over each world's arc, of which the
+       fraction alight is that world's completion. Scaled by the tier's
+       particle budget and dropped entirely on the lowest one. */
+    stars: {
+      count: 9, radius: 34, height: 17, spread: 7.0, arc: 1.5,
+      size: 1.35, glow: 0.34, unlitGlow: 0.03,
+    },
   },
 
   /* Debug switches, all off in play. `freeTravel` opens every gate at once so
@@ -339,8 +432,18 @@ const CONFIG = {
      setting writes: the ceilings scale but the character of the movement — the
      heavy coast, the capped turn — stays exactly what it was. `drive` shapes
      stick strength into travel: above 1 a light push mostly *turns* the
-     figure, so you can look around without gliding off. */
+     figure, so you can look around without gliding off.
+
+     `scheme` is the one to try first if the steering ever feels like work:
+
+       stable-relative  push a direction on screen and go that way. The basis
+                        is input.js's own frozen yaw, never the live camera, so
+                        the view swinging round behind a turn cannot move it.
+       heading          tank steering. Stick x turns, stick y goes. Nothing is
+                        camera-relative at all, which makes it the most
+                        predictable of the two for one thumb and no attention. */
   movement: {
+    scheme: 'stable-relative',   // 'stable-relative' | 'heading'
     maxSpeed: 2.5,           // units/sec, an unhurried walking pace
     accel: 14.0,             // units/sec² while the stick is fully over
     paceScale: 1.15,         // set from settings.pace via `paces` below
@@ -348,10 +451,35 @@ const CONFIG = {
     drive: 1.6,              // exponent on stick strength → forward push
     damping: 0.03,           // per-second velocity decay; you settle, not skid
     maxTurnSpeed: 1.7,       // radians/sec, hard ceiling
-    turnGain: 4.0,           // how eagerly the heading chases the stick
-    turnResponse: 7.0,       // damping rate of the turn itself
-    deadzone: 10,            // px of stick offset that does nothing
+    /* `turnGain` is how much of a heading error is asked for as turn rate, and
+       it is the number that decides whether a correction is a lean or a snap.
+       At the 4.0 it used to be, the ceiling above was reached by a heading
+       error of only 24° — so very nearly every correction was a full-rate
+       turn and there was no gentle part of the range at all. Low gain with a
+       high `turnResponse` is what eases: the rate asked for is small, and the
+       turn tracks it closely enough not to overshoot and hunt. */
+    turnGain: 2.1,           // how eagerly the heading chases the stick
+    turnResponse: 10.0,      // damping rate of the turn itself
+    deadzone: 16,            // px of stick offset that does nothing
+    angleHysteresis: 0.10,   // radians of thumb wobble that changes nothing
     stickRadius: 78,         // px from the origin that counts as fully over
+
+    /* How the steering basis keeps up with the wanderer. It is re-aligned
+       briskly once nobody is steering, and while they *are* steering it moves
+       at `basisEaseHeld` — slow enough that a sustained turn barely shifts it
+       and no gesture can be felt to drift, but not so slow that a very long
+       drag ends up steering against a basis from minutes ago. */
+    basisEase: 0.9,          // damping rate of the basis while idle
+    basisEaseHeld: 0.12,     // ...and while a finger is down. Keep this tiny.
+
+    /* The 'heading' scheme. `headingTurnArc` is how far off the current facing
+       a fully-over stick asks for — the turn rate that results is still the
+       capped, damped one above. `headingTurnDrive` is what a turn with no
+       forward at all is worth as strength, kept low so that turning on the
+       spot stays turning on the spot. */
+    headingTurnArc: 1.05,    // radians off the facing at full stick x
+    headingTurnDrive: 0.45,  // strength a pure turn asks for
+
     groundFollow: 7.0,       // how quickly the figure settles onto the ground
     edgeAt: 0.88,            // fraction of the world radius where it leans back
     edgePull: 9.0,           // units/sec² of that lean, at the very edge
@@ -359,15 +487,64 @@ const CONFIG = {
 
   wind: { strength: 0.10 },
 
-  fireflies: { count: 14, brightness: 1.5, range: 46 },
+  fireflies: { count: 14, brightness: 1.25, range: 46 },
 
   haze: { radius: 110, height: 7.5, amount: 0.30, centerY: 1.5 },
+
+  /* Ambience: things to notice, that ask nothing. Three instanced or points
+     systems, one draw call each, all counted by the tier — see ambience.js.
+
+     The drift and the curtains are deliberately far below the bloom threshold.
+     They are air and weather, not light, and the moment either of them starts
+     to bloom they undo the readability work rather than adding to the mood. */
+  ambience: {
+    // drifting pollen, in a box that travels with the viewer and wraps
+    driftBox: 90,            // how wide that box is, in units
+    driftHeight: 16,         // ...and how tall
+    driftSize: 26,           // point size at one unit of depth
+    driftOpacity: 0.16,      // very faint. This is air, not fireflies.
+
+    // shapes standing in the weather past the rim, as fractions of the radius
+    silhouetteNear: 1.30,
+    silhouetteFar: 2.10,
+    silhouetteHeight: 46,
+    silhouetteDepth: 0.42,   // how far they darken against the fog
+
+    // the slow thing the sky is doing
+    curtainRadius: 300,
+    curtainWidth: 220,
+    curtainHeight: 150,
+    curtainLift: -20,        // hung from below the horizon so they stand up out of it
+    curtainAmount: 0.13,
+  },
 
   input: {
     dragThreshold: 12,       // px before a touch counts as a drag, not a tap
     tapMaxMs: 420,           // a touch shorter than this, and still, is a tap
     tapAnchor: 0.62,         // where down the screen the wanderer sits, 0..1
     tapDecaySeconds: 1.6,    // how long a tap keeps nudging them along
+  },
+
+  /* The dream telling itself. All the writing is in the two tables at the top
+     of story.js; these are only the timings.
+
+     The whisper numbers are all restraints rather than triggers — every one of
+     them is a reason *not* to speak. `whisperAfterSeconds` is a stretch with
+     no progress of any kind, `whisperSettleSeconds` keeps it quiet while
+     somebody is still taking a new place in, and `whispersPerVisit` is the
+     point at which it accepts that the player is fine and stops offering.
+     Turning `whispers` off leaves the beats and removes the nudging entirely. */
+  story: {
+    holdSeconds: 7.5,          // how long a passage stays up of its own accord
+    minHoldSeconds: 2.0,       // ...and the least it stays before moving skips it
+    gapSeconds: 3.5,           // enforced quiet between one passage and the next
+
+    whispers: true,
+    whisperAfterSeconds: 34,   // no progress at all for this long, first
+    whisperSettleSeconds: 20,  // ...and never this soon after arriving somewhere
+    whisperGapSeconds: 95,     // ...and never closer together than this
+    whispersPerVisit: 3,       // ...and only this many before it lets you be
+    carryHint: 3,              // motes in tow before it mentions the monument
   },
 
   ui: {
@@ -421,29 +598,32 @@ const CONFIG = {
   tiers: {
     high: {
       maxMotes: 48, starScale: 1.0, particleScale: 1.0,
+      driftCount: 260, silhouettes: 22, skyVeils: 3,
       reflections: true, reflectionSize: 512, waterNormalSize: 256,
       groundCells: 128,
       fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
       mengerDepth: 2, blockSegments: 3, cloudLayers: 3, kaleidoscope: true,
-      charSegments: 22, charShadow: true, companion: true,
+      charSegments: 22, charShadow: true, companion: true, sanctuaryExtras: true,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
       maxMotes: 34, starScale: 0.7, particleScale: 0.8,
+      driftCount: 170, silhouettes: 16, skyVeils: 2,
       reflections: true, reflectionSize: 256, waterNormalSize: 128,
       groundCells: 96,
       fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
       mengerDepth: 2, blockSegments: 2, cloudLayers: 2, kaleidoscope: true,
-      charSegments: 16, charShadow: true, companion: true,
+      charSegments: 16, charShadow: true, companion: true, sanctuaryExtras: true,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
       maxMotes: 20, starScale: 0.45, particleScale: 0.6,
+      driftCount: 90, silhouettes: 11, skyVeils: 1,
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
       groundCells: 64,
       fractalDepth: 3, fractalInstances: 1400, structureScale: 0.6,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 1, kaleidoscope: false,
-      charSegments: 11, charShadow: false, companion: true,
+      charSegments: 11, charShadow: false, companion: true, sanctuaryExtras: true,
       bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.2,
     },
     /* The floor. Meant for a phone that would rather stay cool than look its
@@ -452,11 +632,14 @@ const CONFIG = {
        ratio and the transparent sheets, not the instance count. */
     saver: {
       maxMotes: 14, starScale: 0.30, particleScale: 0.40,
+      // the silhouettes stay: they are the most atmosphere per pixel of fill
+      // of anything here, and six of them is a horizon
+      driftCount: 0, silhouettes: 6, skyVeils: 0,
       reflections: false, reflectionSize: 0, waterNormalSize: 64,
       groundCells: 48,
       fractalDepth: 3, fractalInstances: 900, structureScale: 0.45,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 0, kaleidoscope: false,
-      charSegments: 9, charShadow: false, companion: false,
+      charSegments: 9, charShadow: false, companion: false, sanctuaryExtras: false,
       bloom: false, bloomScale: 0.30, msaa: 0, pixelRatio: 1.0,
     },
   },
@@ -477,6 +660,9 @@ function applyMotionPreference() {
   const reduced = settings.reducedMotion ?? osReducedMotion;
   motion.camera = reduced ? 0.18 : 1;   // camera bob
   motion.scene  = reduced ? 0.6 : 1;    // drift of everything else
+  // ...and the same choice reaches the CSS, so the overlays shorten their
+  // fades whether the preference came from the OS or from the settings panel
+  document.body.classList.toggle('reduced-motion', reduced);
 }
 applyMotionPreference();
 
@@ -554,8 +740,13 @@ function start() {
   let companion  = createCompanion({ CONFIG, quality, scene });
   let post       = createPost({ CONFIG, quality, renderer, scene, camera, motion });
 
-  // a gathered mote is acknowledged by the light at the chest
-  motes.onGather = () => character.flare();
+  // a gathered mote is acknowledged by the light at the chest — and, the very
+  // first time, by the dream explaining what it is you have just picked up
+  function onMoteGathered() {
+    character.flare();
+    story.note('mote');
+  }
+  motes.onGather = onMoteGathered;
 
   const audio = createAudio(CONFIG);
   audio.setMuted(settings.muted);
@@ -632,8 +823,17 @@ function start() {
     journal.show();
   };
 
+  /* The dream, telling itself. It owns every passage the game says that is not
+     a name or a found thing, and it is handed events rather than asked
+     questions — so nothing else in here has to know what a beat is or whether
+     one has been said before. */
+  const story = createStory({ CONFIG, archive, ui });
+
   ui.onSettingsSave = saveSettings;
-  ui.onBegin = () => ui.showWorldName(world.name, 1400);
+  ui.onBegin = () => {
+    ui.showWorldName(world.name, 1400);
+    story.begin(world.key);
+  };
   ui.onStep = () => {
     if (!ui.transitioning && gate && gate.enterable
         && gate.distance2(rig.state.x, rig.state.z) < CONFIG.gate.promptRadius ** 2) {
@@ -641,10 +841,14 @@ function start() {
     }
   };
 
+  /* The steering never asks the camera which way is up — that was the whole
+     source of the drift, since the follow camera orbits as the wanderer turns.
+     It is handed the rig's own yaw instead: no bob, no look smoothing, nothing
+     that swings. */
   const input = createInput({
     CONFIG,
-    camera,
     domElement: renderer.domElement,
+    getHeading: () => rig.state.yaw,
     onWake: () => ui.wake(),
     onTap: (x, y) => ui.tapAt(x, y),
   });
@@ -663,6 +867,7 @@ function start() {
   let gate = null;
   let cyclePalette = null;
   let fragments = null;
+  let ambience = null;         // drift, silhouettes, curtains — scenery only
   let display = null;          // the memories standing up, in the sanctuary
   let inSanctuary = false;
   let returnTo = 0;            // the world the sanctuary's gate returns to
@@ -682,11 +887,17 @@ function start() {
     if (content) content.dispose();
     if (gate) gate.dispose();
     if (fragments) fragments.dispose();
+    if (ambience) ambience.dispose();
     if (display) { display.dispose(); display = null; }
 
     terrain.build(world);
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
     gate = createGate({ CONFIG, scene, world, terrain });
+    // scenery, and only scenery: nothing in here can be gathered, woken or
+    // missed, and it is built before the pre-warm below so its shaders link
+    // while the screen is still full of gate-light
+    ambience = createAmbience({ CONFIG, quality, scene, world });
+    ambience.setViewportHeight(window.innerHeight);
     cyclePalette = makePaletteCycler(p, CONFIG.mood);
     gateAnnounced = false;
     ui.setStepPrompt(false);
@@ -728,7 +939,7 @@ function start() {
       content.setMasteryForm(archive.monumentForm(null, s.mastery));
 
       display = createSanctuaryDisplay({
-        CONFIG, scene, world, terrain, archive,
+        CONFIG, quality, scene, world, terrain, archive,
       });
       analytics.track(EVENTS.sanctuaryOpened, { found: s.discoveries });
     } else {
@@ -758,11 +969,18 @@ function start() {
     }
 
     // name the place as it comes into view — held back so it arrives with the
-    // gate-light still clearing, not on top of it
+    // gate-light still clearing, not on top of it. The name sits at the top of
+    // the frame and the dream's own line at the bottom, so arriving reads as a
+    // page turning rather than as two notices fighting.
+    //
+    // Both are held until the title has lifted: on the very first load this
+    // runs before anyone has pressed begin, and the opening beat covers the
+    // first world itself.
     if (ui.began) {
       ui.showWorldName(
         world.variantName ? `${world.name} — ${world.variantName.toLowerCase()}` : world.name,
         1400);
+      story.arrive(world.key, isHome);
     }
 
     // water is per-world: most of them have none at all
@@ -771,6 +989,9 @@ function start() {
 
     // arrive out on the plaza, facing the monument in the middle
     rig.place(0, world.ground.plazaRadius * 2.4, 0);
+    // ...and "up the screen" means the way they are facing from the first
+    // frame, rather than easing over from however the last world was left
+    input.syncBasis();
     companion?.place(rig.state);
 
     // a first handful of motes already drifting, so the world is never empty
@@ -840,6 +1061,7 @@ function start() {
 
     sky.setViewportHeight(h);
     fireflies.setViewportHeight(h);
+    ambience?.setViewportHeight(h);
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 120));
@@ -871,13 +1093,14 @@ function start() {
     character = createCharacter({ CONFIG, quality, scene });
     companion = createCompanion({ CONFIG, quality, scene });
     post = createPost({ CONFIG, quality, renderer, scene, camera, motion });
-    motes.onGather = () => character.flare();
+    motes.onGather = onMoteGathered;
 
     // ...and this rebuilds the ground, the fractals and the water, and
     // re-tints everything that was just replaced
     const at = { x: rig.state.x, z: rig.state.z, yaw: rig.state.yaw };
     loadWorld(worldIndex);
     rig.place(at.x, at.z, at.yaw);
+    input.syncBasis();
 
     resize();
   }
@@ -911,6 +1134,9 @@ function start() {
     if (!rec) return;
 
     ui.showMemory('new memory', d.name, d.note, d.rarity);
+    // ...and the first one is also where the dream draws the line between a
+    // mote, which is light, and a memory, which is a thing that happened
+    story.note('memory');
     analytics.track(EVENTS.discoveryFound,
       { id: d.id, world: d.world, rarity: d.rarity });
     character.flare();
@@ -925,6 +1151,7 @@ function start() {
       serves the walked-into ring and the tapped "step through" prompt. */
   function enterGate() {
     analytics.track(EVENTS.gateEntered, { from: world.key });
+    story.note('travel');
     ui.setStepPrompt(false);
     // from the sanctuary the gate is the way back to where you were; from a
     // world it is the way on to the next one
@@ -937,7 +1164,16 @@ function start() {
       again, not like a page reload */
   function resetJourney() {
     archive.reset();
-    if (!ui.transition(() => loadWorld(0))) loadWorld(0);
+    /* Begun again means taught again. The archive's reset has already dropped
+       every `story:` milestone, so the opening beat is owed — and it has to be
+       claimed *before* the world is built, or buildPlace's own arrival line
+       would be queued in front of it. */
+    const begin = () => {
+      story.reset();
+      story.begin(WORLDS[0].key);
+      loadWorld(0);
+    };
+    if (!ui.transition(begin)) begin();
   }
 
   /* ── slow ambient wind, a lazy noise field made of sines ───────────── */
@@ -996,10 +1232,20 @@ function start() {
     fireflies.setPalette(p);
     motes.setPalette(p);
     fragments?.setPalette(p);
+    ambience?.setPalette(p);
     display?.setPalette(p);
     character.setPalette(p);
     gate.setPalette(p);
   }
+
+  /* What the dream can see of where the player is up to. Filled in each frame
+     and handed to story.update — one reused object, because this is per-frame
+     and a fresh one would be sixty allocations a second to describe a mood. */
+  const situation = {
+    began: false, transitioning: false, menuOpen: false, moving: false,
+    inSanctuary: false, gateEnterable: false, gateNear: false,
+    freeMotes: 0, heldMotes: 0, awake: 0, delivered: 0, fragmentNear: false,
+  };
 
   // the ground's light list, rebuilt each frame from two sources and never
   // reallocated
@@ -1010,6 +1256,7 @@ function start() {
   let time = 0;
   let ambientAt = 2;
   let moodAt = 0;
+  let exposureScale = 1;      // the adaptive aperture; 1 is wide open
 
   // a rolling frame rate, for tuning from the console. Smoothed hard enough
   // that a number read off it by eye means something.
@@ -1062,6 +1309,7 @@ function start() {
       content.updateAwakening(dt, rig.state.x, rig.state.z, (i, s) => {
         if (inSanctuary) return;      // nothing here sleeps, or is scored
         audio.addLayer();
+        story.note('awaken');
         archive.noteAwakened(world.key, i, content.awake);
         analytics.track(EVENTS.structureAwakened, { world: world.key });
         companion?.notice(s.x, s.y, s.z);   // off it goes to look
@@ -1078,6 +1326,7 @@ function start() {
     const arrived = motes.update(dt, ctx, rig.state, content.monumentPoint);
     if (arrived > 0 && !inSanctuary) {
       delivered += arrived;
+      story.note('deliver');
       archive.noteDelivered(world.key, delivered);
       content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
     }
@@ -1097,6 +1346,9 @@ function start() {
     if (!gateAnnounced && gate.enterable && !inSanctuary) {
       gateAnnounced = true;
       if (ui.began) ui.announce('a gate has opened');
+      // ...and the first time it ever happens, what opened it and what to do
+      // with it, which is the one piece of the loop nothing else teaches
+      story.note('gate-open');
     }
 
     // standing before an open gate, offer the step — travel must never depend
@@ -1141,6 +1393,26 @@ function start() {
 
     companion?.update(dt, ctx, rig.state, gate);
 
+    /* ── and the dream, saying something about all that ────────────────
+     * Last of the gameplay systems on purpose: everything it reads has been
+     * settled by now, including whether there is an unfound memory in view.
+     */
+    situation.began = ui.began;
+    situation.transitioning = ui.transitioning;
+    situation.menuOpen = ui.panelOpen || journal.open;
+    // intent as well as motion, so a passage gets out of the way the moment
+    // the player reaches for the stick rather than once they are under way
+    situation.moving = input.navigating || rig.moving;
+    situation.inSanctuary = inSanctuary;
+    situation.gateEnterable = gate.enterable;
+    situation.gateNear = gateD2 < CONFIG.gate.promptRadius ** 2;
+    situation.freeMotes = motes.free;
+    situation.heldMotes = motes.held;
+    situation.awake = content.awake;
+    situation.delivered = delivered;
+    situation.fragmentNear = !!frag;
+    story.update(dt, situation);
+
     // the ground takes light from the motes and from whatever is awake, as
     // one list of the nearest few
     lights.length = 0;
@@ -1151,10 +1423,33 @@ function start() {
     if (lights.length > CONFIG.ground.lights) lights.length = CONFIG.ground.lights;
     terrain.setLights(lights);
 
+    /* ── the eye adjusting ─────────────────────────────────────────────
+     * `lights` is already the brightest few things near the camera, sorted,
+     * which makes it a free and quite good estimate of how much light is
+     * about to be in the frame. Near things count for more than far ones, and
+     * an open gate is added on top because a beacon is a lot of light that
+     * carries no ground lights of its own.
+     */
+    const R = CONFIG.render;
+    let load = gate.open * 0.9;
+    for (const l of lights) load += (l.vis * l.glow) / (1 + l.dist2 * 0.012);
+
+    const want = Math.max(
+      R.adaptFloor,
+      1 / (1 + R.adaptStrength * Math.max(0, load - R.adaptFrom))
+    );
+    // closing is quicker than opening, the way an eye is: walking into light
+    // should not blind you, and walking back out should take a moment to
+    // recover from rather than snapping bright
+    exposureScale = THREE.MathUtils.damp(
+      exposureScale, want, want < exposureScale ? R.adaptDown : R.adaptUp, dt);
+    ui.setExposureScale(exposureScale);
+
     sky.update(dt, ctx);
     if (water) water.update(dt, ctx);
     fireflies.update(dt, ctx);
     haze.update(dt, ctx);
+    ambience.update(dt, ctx);
     content.update(dt, ctx);
 
     post.render(dt);
@@ -1187,6 +1482,14 @@ function start() {
     setTier(name) { applyQualityChoice(name); return tierName; },
     /** force the next quality step down, as the frame watcher would */
     downgrade() { const was = tierName; downgrade(true); return `${was} -> ${tierName}`; },
+    /** swap steering scheme live, e.g. __night.scheme('heading') */
+    scheme(name) {
+      if (name === 'stable-relative' || name === 'heading') {
+        CONFIG.movement.scheme = name;
+        input.syncBasis();
+      }
+      return CONFIG.movement.scheme;
+    },
     renderer, scene, camera, rig, terrain,
     get post() { return post; },
     get character() { return character; },
@@ -1194,9 +1497,18 @@ function start() {
     get gate() { return gate; },
     get motes() { return motes; },
     get fragments() { return fragments; },
+    get ambience() { return ambience; },
     get display() { return display; },
     get inSanctuary() { return inSanctuary; },
     journal,
+    story,
+    /** say a beat again regardless of whether it has been said — for reading
+        the copy back without playing to it */
+    say(id) {
+      const lines = STORY_BEATS[id];
+      if (lines) ui.showBeat(lines);
+      return lines || Object.keys(STORY_BEATS);
+    },
     /** visit the sanctuary, or come back from it */
     home() { inSanctuary ? loadWorld(returnTo) : loadSanctuary(); return world.key; },
     /** walk to the nearest unfound memory, for looking at one on purpose */
@@ -1208,12 +1520,14 @@ function start() {
     },
     /** wake the whole world at once, for looking at what that does */
     wakeAll() {
+      // This used to write to `journey` and call `saveJourneySoon`, neither of
+      // which has existed since the archive replaced the old save record — so
+      // it threw on the first structure it woke.
       const was = CONFIG.awaken.radius;
       CONFIG.awaken.radius = 1e6;
       content.updateAwakening(0, rig.state.x, rig.state.z, (i) => {
         audio.addLayer();
-        journey.awakened.add(i);
-        saveJourneySoon();
+        if (!inSanctuary) archive.noteAwakened(world.key, i, content.awake);
       });
       CONFIG.awaken.radius = was;
       return content.awake;

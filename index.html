@@ -116,6 +116,45 @@
   }
   #worldname.show { opacity: 0.78; }
 
+  /* The dream saying something.
+     Deliberately the quietest thing on the screen and the lowest — the world
+     is what is being looked at, and a passage that arrives across the middle
+     of it is an interruption however softly it is worded. It sits above the
+     "step through" prompt so the two never collide when a gate is open.
+
+     Opacity only: nothing here moves, slides or scales, which is what makes
+     it safe under reduced motion rather than merely tolerable. */
+  #beat {
+    position: fixed; left: 0; right: 0;
+    bottom: max(21vh, calc(env(safe-area-inset-bottom) + 138px));
+    text-align: center;
+    padding: 0 28px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 2.2s ease;
+  }
+  #beat.show { opacity: 0.72; }
+  #beat .b1, #beat .b2 {
+    max-width: 30ch;
+    margin: 0 auto;
+    font: 300 clamp(13px, 1.9vw, 15.5px)/1.75 var(--serif);
+    font-style: italic;
+    letter-spacing: 0.055em;
+    color: var(--ink-soft);
+    text-shadow: 0 0 20px var(--glow);
+  }
+  /* the second line is the one that usually does the teaching, and reads as
+     an afterthought rather than an instruction because of it */
+  #beat .b2 { margin-top: 3px; color: var(--ink-faint); }
+  #beat .b2:empty { display: none; }
+
+  /* Reduced motion, from the OS or from the settings panel. The fade is what
+     it is — a cross-fade of text is not vestibular — but it is shortened so
+     the passage simply appears and goes rather than drifting in. */
+  @media (prefers-reduced-motion: reduce) {
+    #beat { transition-duration: 0.5s; }
+  }
+  body.reduced-motion #beat { transition-duration: 0.5s; }
+
   /* offered when standing before an open gate, so travel never depends on
      hitting an exact radius while moving */
   #step {
@@ -301,11 +340,24 @@
     transition: opacity 0.35s ease;
   }
   #panel.open { opacity: 1; pointer-events: auto; }
+  /* The card is taller than a short phone in portrait once the quality and
+     pace pickers are stacked, and its grid parent aligns to the *end* edge —
+     so anything that overflowed went off the top of the screen where it could
+     not be reached at all. That put "open the dream archive" and the reset
+     out of reach on exactly the devices this is built for.
+
+     dvh rather than vh: vh resolves against the largest viewport, i.e. with
+     the browser toolbar hidden, so a vh-sized card is taller than what you can
+     actually see whenever the toolbar is showing. */
   #panel-card {
     width: min(400px, calc(100vw - 28px));
+    max-height: 85dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     margin-bottom: max(16px, env(safe-area-inset-bottom));
     box-sizing: border-box;
-    padding: 22px 24px calc(14px + env(safe-area-inset-bottom) * 0.4);
+    padding: 22px 24px calc(22px + env(safe-area-inset-bottom) * 0.4);
     border-radius: 22px;
     background: var(--wash);
     border: 1px solid rgba(226, 214, 255, 0.14);
@@ -457,9 +509,12 @@
   }
   #journal.open { opacity: 1; pointer-events: auto; }
 
+  /* dvh, so the bottom of the card is not lost behind mobile browser chrome.
+     vh resolves against the viewport with the toolbar *hidden*, which on a
+     phone means the last rows of every tab sat underneath it. */
   #journal .j-card {
     width: min(560px, 100vw);
-    height: min(88vh, 900px);
+    height: min(88dvh, 900px);
     display: flex; flex-direction: column;
     box-sizing: border-box;
     border-radius: 26px 26px 0 0;
@@ -702,6 +757,13 @@
   <div class="kind"></div>
   <div class="name"></div>
   <div class="note"></div>
+</div>
+
+<!-- the dream, saying something. Low in the frame, under everything the
+     player is actually looking at, and never in the way of the world. -->
+<div id="beat" aria-live="polite">
+  <div class="b1"></div>
+  <div class="b2"></div>
 </div>
 
 <div id="stick"><div id="knob"></div></div>

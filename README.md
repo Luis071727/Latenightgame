@@ -14,7 +14,23 @@ a complete way to play it.
   How hard you push asks for a *direction*, not a speed — a frantic shove is
   worth no more than a firm one.
 - **Tap** — a gentle nudge toward wherever you tapped, which fades on its own.
-- **Keyboard** — `W`/`A`/`S`/`D` or the arrow keys, relative to the camera.
+- **Keyboard** — `W`/`A`/`S`/`D` or the arrow keys.
+
+Push a direction and you go that direction. The steering basis is frozen the
+moment your finger lands and held for the whole gesture, so "up" means the same
+thing at the end of a drag as it did at the start, however far the camera has
+swung round behind the turn. There is no balancing act and nothing to correct.
+
+There are two schemes, in `CONFIG.movement.scheme`, switchable live:
+
+| scheme | what it does |
+|---|---|
+| `stable-relative` *(default)* | push a direction on screen and go that way. The basis is the game's own yaw, never the live camera, so the view swinging behind a turn cannot move it. |
+| `heading` | tank steering. Stick x asks for a gentle turn off the current facing, stick y goes. Nothing is camera-relative at all, which makes it the most predictable of the two for one thumb and no attention. Pulling back does not reverse — it stops asking, and the coast does the rest. |
+
+```js
+__night.scheme('heading')        // try the other one, immediately
+```
 
 Everything else happens by being near it:
 
@@ -36,7 +52,7 @@ Everything else happens by being near it:
 
 ### The Dream Archive
 
-Wandering now leaves something behind. Each world holds eight **memories** —
+Wandering now leaves something behind. Each world holds twelve **memories** —
 named, written, and placed by that world's own seed, so a thing is in the same
 spot on every visit and every device. Nothing marks them: a memory notices you
 from twenty metres out and brightens, the companion goes to look, and the
@@ -44,9 +60,14 @@ wanderer's eyes find it a moment before you do. Walk up to one and it comes to
 you. Taken memories are never placed again, so a world you have picked clean
 holds nothing and a world you half-know holds exactly what you missed.
 
-Thirty-two memories exist. Some are locked behind a condition — enough of a
-world awake, enough motes delivered, a second visit, another memory found
-first — and the journal says only that *something has to be true first*.
+Forty-eight memories exist, twelve in each world: five that make up its set,
+two rare ones out at the edges, two more scattered about, and three that will
+not appear until something is true. The journal says only that *something has
+to be true first*; the conditions are
+enough of a world awake, enough motes delivered, an nth visit, another memory
+found first, this world known to a given depth, a fraction of everything found,
+or every world walked in. The last three are the long tail — they are what puts
+something in a world you finished months ago that was not there when you left.
 
 Finding them completes **sets**, deepens **mastery** of each world, and unlocks
 cloaks, companions, titles and monument forms. Mastery is not an XP bar: it is
@@ -60,12 +81,54 @@ expires, and nothing is lost by staying away.
 
 ### Your sanctuary
 
-From the archive you can **visit your sanctuary** — a small warm place that is
-only yours. Nothing there sleeps and nothing is scored. Its monument answers to
-the whole journey rather than to any one world, and around it stand all
-thirty-two memories in four arcs, one per world: the ones you have found burn
-and turn slowly, and the ones you have not are still there, dim and empty,
-waiting. Its gate takes you back to exactly where you were.
+From the archive you can **visit your sanctuary** — a small place that is only
+yours. Nothing there sleeps and nothing is scored, and its gate takes you back
+to exactly where you were.
+
+It is built rather than grown: a wide level court and a few shallow terraces
+stepping outward, a palette of warm unsaturated stone built around none of the
+four wild hues, thinner fog than anywhere else so it is legible all the way to
+the rim, and twelve near-identical standing shapes that read as a colonnade
+rather than a wood. It is a home, not a biome.
+
+Four things stand in it, and between them they answer four different questions
+you have on coming home:
+
+| | |
+|---|---|
+| **the gallery** | *what have I found?* — one slot per memory in the game, in four arcs of twelve. Found ones burn and turn; unfound ones stay as dim empty sockets. The gaps are the half that does the work. |
+| **the cairn** | *how far have I come?* — a spiral of stones rising around the monument, one for every memory kept, coloured by how rare it was. |
+| **the world marks** | *where have I been?* — four standing stones, sunk to a stub until you have walked there, then rising and brightening as the place comes to be known. How many are lit is your count of worlds visited. |
+| **the constellations** | *how much of each place is mine?* — a cluster of stars over each world's arc, of which the fraction alight is that world's completion. |
+
+### The dream telling itself
+
+There is no tutorial and there is not going to be one. Nothing stops you, waits
+for a button, or explains a mechanic. Instead a handful of short passages
+arrive low on the screen at the moment they would mean something, say one true
+thing, and go away.
+
+Each fires **once, ever** — across sessions, devices and months away — on first
+launch, your first mote, your first delivery, your first awakening, your first
+memory, the first time a gate opens, your first journey through one, your first
+time home, and each of the five places the first time you arrive in it. Each is
+one or two lines, and each carries the framing while quietly teaching the thing
+you are about to need. The first-gate passage is what tells you both what
+opened it and that you travel by walking in.
+
+They never block, never wait to be dismissed, and moving puts one away early —
+after a two-second floor, so it cannot vanish before it could be read.
+
+There is also a **whisper**: if you have made no progress of any kind for a
+good while, one soft line suggests the thing you are nearest to being able to
+do. Every number governing it is a reason not to speak — no sooner than 34s
+without progress, never within 20s of arriving somewhere, never within 95s of
+the last one, at most three in a visit, and never the same line twice running.
+A game about not being pressured cannot have a hint system that pesters.
+
+All the writing is in two tables at the top of [`src/story.js`](src/story.js),
+`BEATS` and `WHISPERS`. Nothing below them reads what any of the copy says, so
+the tone can be rewritten without touching a line of logic.
 
 ### Dream variants
 
@@ -107,6 +170,81 @@ wander or drift), graphics quality, and a way to begin the journey again. The
 journey itself — which world you are in, what you have woken there, how full
 the monument is — is written to localStorage as you go, so a refresh or a phone
 quietly killing the tab overnight puts you back where you drifted off.
+
+### Everything there is to find
+
+Forty-eight memories, twelve per world: five that make up the world's set, two
+rare ones out at the edges, two more scattered about, and three that will not
+appear until something is true. `needs` is what has to be true — until then the
+journal shows a memory only as a shape.
+
+**the waking meadow** (`meadow`)
+
+| memory | rarity | where | needs |
+|---|---|---|---|
+| Petal Memory | common | grove | — |
+| Dawn Thread | common | wander | — |
+| Sleeping Seed | common | wander | — |
+| Whispering Leaf | uncommon | grove | — |
+| Bloom Fragment | uncommon | monument | — |
+| The First Flower | rare | rim | — |
+| The Sleeping Crown | rare | fog | — |
+| The Meadow Dreaming | dream | monument | `awake: 12` |
+| Grass Hour | common | wander | — |
+| Kept Morning | uncommon | rim | — |
+| The Long Field | rare | fog | `visits: 3` |
+| What the Meadow Keeps | mythic | monument | `completion: 0.55` |
+
+**the quiet harbour** (`harbor`)
+
+| memory | rarity | where | needs |
+|---|---|---|---|
+| Tide Memory | common | water | — |
+| Moon Shell | common | water | — |
+| Blue Thread | common | wander | — |
+| Distant Bell | uncommon | grove | — |
+| Harbour Echo | uncommon | monument | — |
+| The Last Lantern | rare | rim | — |
+| The Quiet Name | rare | fog | — |
+| The Tide Turning | dream | water | `delivered: 10` |
+| Rope Memory | common | wander | — |
+| Low Water | uncommon | water | — |
+| The Far Bell | rare | fog | `visits: 3` |
+| What the Harbour Keeps | mythic | water | `mastery: 0.75` |
+
+**the lantern grove** (`grove`)
+
+| memory | rarity | where | needs |
+|---|---|---|---|
+| Coral Memory | common | grove | — |
+| Deep Glow | common | wander | — |
+| Lantern Seed | common | grove | — |
+| Lost Spark | uncommon | fog | — |
+| Drift Fragment | uncommon | monument | — |
+| The Breathing Reef | rare | rim | — |
+| The Drowned Gate | rare | gate | — |
+| The Grove Listening | mythic | fog | `awake: 16, visits: 2` |
+| Slow Current | common | wander | — |
+| Held Breath | uncommon | grove | — |
+| The Unlit Lantern | rare | rim | `visits: 3` |
+| What the Grove Keeps | mythic | gate | `completion: 0.70` |
+
+**the star garden** (`garden`)
+
+| memory | rarity | where | needs |
+|---|---|---|---|
+| Star Shard | common | grove | — |
+| Crystal Memory | common | wander | — |
+| Warm Star | common | monument | — |
+| Falling Light | uncommon | wander | — |
+| Constellation Thread | uncommon | rim | — |
+| The Garden Keeper | rare | fog | — |
+| The Unlit Star | rare | rim | — |
+| The Fourth Quiet | mythic | monument | `awake: 14, found: ['garden-keeper']` |
+| Cold Thread | common | wander | — |
+| Quiet Orbit | uncommon | grove | — |
+| The Long Night | rare | fog | `visits: 3` |
+| What the Garden Keeps | mythic | rim | `worldsVisited: 4` |
 
 ### The worlds
 
@@ -198,7 +336,36 @@ __night.archive.setVariant('meadow','golden')
 __night.analytics.recent                    // what has been emitted this session
 __night.CONFIG.movement.paceScale = 1.8     // faster than any pace preset
 __night.companion                           // the little light, or null on saver
+__night.scheme('heading')                   // swap steering scheme live
+__night.say('first-gate-open')              // read a story passage back
+__night.story.saying                        // what is on screen, if anything
+__night.ambience                            // drift / silhouette / curtain counts
+__night.display                             // the sanctuary's gallery, cairn and marks
+__night.CONFIG.story.whispers = false       // keep the beats, drop the nudging
+__night.CONFIG.render.adaptStrength = 0     // switch off the adaptive exposure
+__night.CONFIG.ground.lightClamp = 1e6      // ...and the ground's light ceiling
 ```
+
+### Steering, story and light
+
+The knobs added in this pass, and what each is for:
+
+| knob | what it does |
+|---|---|
+| `movement.scheme` | `stable-relative` or `heading` — see **Controls** above. |
+| `movement.basisEase` / `basisEaseHeld` | how fast the steering basis re-aligns with the wanderer when idle, and while a finger is down. The second wants to stay tiny: it exists only so a very long drag cannot end up steering against a basis from minutes ago. |
+| `movement.angleHysteresis` | radians of thumb wobble that change nothing. A near-vertical push goes straight. |
+| `movement.turnGain` / `turnResponse` | low gain with high response is what eases: the rate asked for is small, and the turn tracks it closely enough not to overshoot and hunt. |
+| `movement.headingTurnArc` / `headingTurnDrive` | the `heading` scheme only: how far off the facing a full stick asks for, and what a turn with no forward is worth. |
+| `camera.rotateFollow` / `maxSwingLag` | how quickly the view swings *around* the wanderer, as opposed to how quickly it catches up when they walk away. Kept well under `camera.follow`; the lag is capped so a spin cannot put the figure at the edge of the frame. |
+| `story.holdSeconds` / `minHoldSeconds` / `gapSeconds` | how long a passage stays, the least it stays before moving skips it, and the quiet between two. |
+| `story.whispers` and the four `whisper*` numbers | every restraint on the idle nudge. Set `whispers: false` to keep the beats and drop the nudging entirely. |
+| `render.adaptFrom` / `adaptStrength` / `adaptFloor` / `adaptDown` / `adaptUp` | the adaptive exposure. It closes faster than it opens, the way an eye does, and `adaptFloor` stays near 1 — this must never be something you can catch happening. |
+| `ground.lightClamp` | what all six ground lights together may add up to, at most. Soft-clamped rather than cut, so a quiet world is untouched and a blazing one bends over toward this instead of running away to white. |
+| `motes.crowdRadius` / `crowdFree` / `crowdSoften` | how much light gathered motes give up as more of them crowd the player. `crowdFree` of them cost nothing at all. |
+| `sanctuary.crowdFree` / `crowdSoften` | the same relief for the gallery, where a finished world's arc is a dozen lit haloes side by side. |
+| `bloom.threshold` | raised to 0.88 so only the brightest cores bloom rather than every soft edge in the frame. |
+| `ambience.*` | the drift, the silhouettes past the rim, and the sky curtains. Counts come from the tier; everything here is shape and opacity. |
 
 ### Travel
 
@@ -257,6 +424,10 @@ stay cool than look its best, and is what the software rasterisers are given.
 | Max motes | 48 | 34 | 20 | 14 |
 | Wanderer segments / shadow | 22 / yes | 16 / yes | 11 / no | 9 / no |
 | Companion | yes | yes | yes | no |
+| Drifting pollen | 260 | 170 | 90 | off |
+| Silhouettes past the rim | 22 | 16 | 11 | 6 |
+| Sky curtains | 3 | 2 | 1 | off |
+| Sanctuary constellations | 36 stars | 28 | 20 | off |
 | Water reflections | 512px | 256px | off (shaded plane) | off |
 | Pixel ratio cap | 2 | 1.75 | 1.2 | 1.0 |
 

@@ -22,9 +22,13 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const tapmarkEl = document.getElementById('tapmark');
   const veilEl = document.getElementById('veil');
   const flashEl = document.getElementById('flash');
+  const beatEl = document.getElementById('beat');
+  const beat1El = beatEl?.querySelector('.b1');
+  const beat2El = beatEl?.querySelector('.b2');
 
   let began = false;
   let dim = 1;                  // 1 = awake, 0 = fully asleep
+  let exposureScale = 1;        // 1 = wide open, < 1 = stopped down for a bright scene
   let lastInteraction = performance.now();
   let lastFadeUpdate = performance.now();
   let wakeLock = null;
@@ -322,6 +326,30 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
       stepEl.classList.toggle('show', !!visible);
     },
 
+    /**
+     * The dream saying something, low in the frame.
+     *
+     * Deliberately dumber than `showMemory`: no queue, no timer, no rarity.
+     * story.js owns when a passage appears, how long it stays and what puts it
+     * away, because all three of those are decisions about the *narrative* and
+     * they belong next to the writing rather than in here.
+     *
+     * @param lines one or two short strings
+     */
+    showBeat(lines) {
+      if (!beatEl) return;
+      beat1El.textContent = lines[0] || '';
+      beat2El.textContent = lines[1] || '';
+      beatEl.classList.add('show');
+    },
+
+    hideBeat() {
+      beatEl?.classList.remove('show');
+    },
+
+    /** true while the settings card is up — nothing should narrate over it */
+    get panelOpen() { return panelEl.classList.contains('open'); },
+
     /** main installs what opening the archive does, once the journal exists */
     set onArchive(fn) {
       archiveEl.addEventListener('click', () => { closePanel(); fn?.(); });
@@ -329,6 +357,21 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
 
     /** the archive is a settled place; the sleep timer should not run there */
     keepAwake() { touch(); },
+
+    /**
+     * How far the eye has stopped down, 0..1, from the adaptive exposure in
+     * the main loop.
+     *
+     * It arrives here rather than being written to the renderer directly
+     * because this is the one place that owns `toneMappingExposure` — the
+     * sleep fade rewrites it every single frame, so anything setting it
+     * elsewhere is overwritten within 16ms and reads as a flicker. The two
+     * multiply: falling asleep in a bright clearing dims from wherever the
+     * adaptation had already settled, which is what you want.
+     */
+    setExposureScale(v) {
+      exposureScale = v;
+    },
 
     /** main installs what stepping through actually does */
     set onStep(fn) {
@@ -413,7 +456,10 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
 
       // One number carries the fade: OutputPass reads the renderer's exposure
       // every frame, so this dims the lake, the lanterns and the bloom at once.
-      renderer.toneMappingExposure = CONFIG.render.exposure * (0.18 + 0.82 * dim);
+      // The adaptation multiplies into the same number rather than competing
+      // for it — see `setExposureScale`.
+      renderer.toneMappingExposure =
+        CONFIG.render.exposure * exposureScale * (0.18 + 0.82 * dim);
       // ...and the veil takes it the last of the way to true black
       veilEl.style.opacity = (1 - dim).toFixed(3);
 

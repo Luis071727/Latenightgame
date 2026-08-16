@@ -216,6 +216,32 @@ export function createArchive({ worlds, monumentTarget }) {
     }
   }
 
+  /**
+   * Has this mood been earned? Once, and then for good.
+   *
+   * It used to be recomputed from live mastery every time it was asked, which
+   * was fine only for as long as mastery could never fall. It can: mastery
+   * counts discoveries against how many that world *holds*, so adding memories
+   * to a world lowers everyone's score in it overnight, and a player who had
+   * unlocked a variant at 0.85 could come back after an update to find the
+   * mood they were using quietly swapped back to the default.
+   *
+   * That is the one thing this file promises never happens. So the moment a
+   * threshold is passed it is written down, and the flag is what is consulted
+   * from then on. Nothing is ever taken away — including by us.
+   */
+  function variantUnlocked(key, v) {
+    if (v.default) return true;
+    const flag = `variant:${key}:${v.id}`;
+    if (data.milestones.includes(flag)) return true;
+    if (mastery(key).value + 1e-6 >= (v.at ?? 1)) {
+      data.milestones.push(flag);
+      saveSoon();
+      return true;
+    }
+    return false;
+  }
+
   /** ...and every set, granting its reward the moment the last piece lands */
   function checkCollections() {
     for (const c of COLLECTIONS) {
@@ -404,10 +430,9 @@ export function createArchive({ worlds, monumentTarget }) {
 
     /** every mood of a world, each marked with whether it is available yet */
     variants(key) {
-      const m = mastery(key).value;
       return variantsOf(key).map((v) => ({
         ...v,
-        unlocked: !!v.default || m + 1e-6 >= (v.at ?? 1),
+        unlocked: variantUnlocked(key, v),
         chosen: this.variant(key) === v.id,
       }));
     },
@@ -426,8 +451,7 @@ export function createArchive({ worlds, monumentTarget }) {
       if (!want) return defaultVariant(key);
       const v = variantsOf(key).find((x) => x.id === want);
       if (!v) return defaultVariant(key);
-      const unlocked = !!v.default || mastery(key).value + 1e-6 >= (v.at ?? 1);
-      return unlocked ? v.id : defaultVariant(key);
+      return variantUnlocked(key, v) ? v.id : defaultVariant(key);
     },
 
     /** choose a mood, if it has been unlocked */
