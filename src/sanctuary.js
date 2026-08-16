@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mulberry32 } from './textures.js';
 import { softBoxGeometry } from './fractals.js';
-import { DISCOVERIES, RARITY, discovery } from './discoveries.js';
+import { DISCOVERIES, RARITY, RARITY_ORDER, discovery } from './discoveries.js';
+import { FORM_GLSL, formAttributes } from './shapes.js';
 
 /**
  * The sanctuary, standing up.
@@ -91,6 +92,11 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
         baseY: ground + S.lift + (rar.glow - 0.85) * S.rarityRise,
         y: ground + S.lift + (rar.glow - 0.85) * S.rarityRise,
         rarity: rar,
+        // the form this memory takes, and where it sits on the rarity ladder —
+        // the same two things the fragments out in the worlds carry, so a
+        // memory looks like itself whether you are finding it or visiting it
+        form: formAttributes(d.shape),
+        heat: Math.max(0, RARITY_ORDER.indexOf(d.rarity)) / (RARITY_ORDER.length - 1),
         found: found.includes(d.id),
         phase: (w * 1.7) + i * 0.6,
         // 0..1, how aware of the wanderer it is — the same idea the fragments
@@ -103,14 +109,34 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
 
   const capacity = Math.max(1, slots.length);
 
-  /* ── the bodies ───────────────────────────────────────────────────────── */
-  const geometry = new THREE.OctahedronGeometry(0.5, 0);
+  /* ── the bodies ───────────────────────────────────────────────────────
+   *
+   * The same sphere-rewritten-in-the-vertex-shader the fragments use, from the
+   * same table — so the gallery is a room of forty-eight distinguishable
+   * things rather than forty-eight identical crystals, at no cost in draw
+   * calls. The forms never change once the room is built, so unlike out in the
+   * worlds their attributes are written once and left alone.
+   */
+  const geometry = new THREE.IcosahedronGeometry(0.5, quality.memoryDetail ?? 2);
   const aTint = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
   const aGlow = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+  const aLon = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+  const aLat = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+  const aWarp = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
   aTint.setUsage(THREE.DynamicDrawUsage);
   aGlow.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('aTint', aTint);
   geometry.setAttribute('aGlow', aGlow);
+  geometry.setAttribute('aLon', aLon);
+  geometry.setAttribute('aLat', aLat);
+  geometry.setAttribute('aWarp', aWarp);
+
+  for (let i = 0; i < slots.length; i++) {
+    const f = slots[i].form;
+    aLon.array.set(f.lon, i * 4);
+    aLat.array.set(f.lat, i * 4);
+    aWarp.array.set(f.warp, i * 2);
+  }
 
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -118,14 +144,17 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     vertexShader: /* glsl */`
+      ${FORM_GLSL}
       attribute vec3 aTint;
       attribute float aGlow;
       varying vec3 vTint;
       varying float vGlow, vFacing, vDepth;
       void main() {
         vTint = aTint; vGlow = aGlow;
-        vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        vec3 n = normalize(mat3(modelViewMatrix) * mat3(instanceMatrix) * normal);
+        vec3 form, nrm;
+        formOf(normalize(position), form, nrm);
+        vec4 mv = modelViewMatrix * instanceMatrix * vec4(form * 0.5, 1.0);
+        vec3 n = normalize(mat3(modelViewMatrix) * mat3(instanceMatrix) * nrm);
         vFacing = abs(n.z);
         vDepth = -mv.z;
         gl_Position = projectionMatrix * mv;
@@ -402,6 +431,17 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
   const dim = new THREE.Color(world.palette.fractalLow);
   const halo = new THREE.Color(world.palette.mote);
 
+  /* Each kept memory burns at its own place on the rarity ladder, the same way
+     it did out in the world it came from — so the gallery reads as a range of
+     things rather than one colour repeated forty-eight times. */
+  function mixTints() {
+    for (const s of slots) {
+      s.body = (s.body || new THREE.Color())
+        .copy(halo).lerp(lit, 0.35 + 0.65 * s.heat);
+    }
+  }
+  mixTints();
+
   /* The stonework and the stars are placed once and then left alone — none of
      it moves, and none of it can change without leaving the room and coming
      back. Writing their matrices every frame would be sixty times a second of
@@ -466,6 +506,7 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
       if (p.bloom) lit.set(p.bloom);
       if (p.fractalLow) dim.set(p.fractalLow);
       if (p.mote) halo.set(p.mote);
+      mixTints();
       if (stoneMat) {
         if (p.fractalLow) stoneMat.uniforms.uStone.value.set(p.fractalLow);
         if (p.skyTopA) stoneMat.uniforms.uSky.value.set(p.skyTopA);
@@ -543,11 +584,14 @@ export function createSanctuaryDisplay({ CONFIG, quality, scene, world, terrain,
                     * (1 + s.near * S.nearSwell);
         const power = (s.found ? s.rarity.glow * breathe : S.emptyGlow)
                     * (1 + s.near * S.nearGlow);
-        const col = s.found ? lit : dim;
+        const col = s.found ? s.body : dim;
 
+        const f = s.form;
         dummy.position.set(s.x, s.y + Math.sin(t * 0.35 + s.phase) * S.bob, s.z);
-        dummy.rotation.set(0, s.found ? t * 0.18 + s.phase : s.phase, 0.4);
-        dummy.scale.setScalar(scale);
+        // an empty socket stands upright; a memory that is yours turns slowly,
+        // and now there is something worth turning to look at
+        dummy.rotation.set(0, s.found ? t * 0.18 + s.phase : s.phase, s.found ? 0.16 : 0.4);
+        dummy.scale.set(scale * f.scale[0], scale * f.scale[1], scale * f.scale[2]);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
 

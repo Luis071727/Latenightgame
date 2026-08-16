@@ -639,6 +639,9 @@ const CONFIG = {
       fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
       mengerDepth: 2, blockSegments: 3, cloudLayers: 3, kaleidoscope: true,
       charSegments: 22, charShadow: true, companion: true, sanctuaryExtras: true,
+      // how finely a memory's form is resolved — the vertex shader rewrites a
+      // sphere into it, so this is the one knob that costs per-vertex work
+      memoryDetail: 2,
       bloom: true, bloomScale: 0.5, msaa: 0, pixelRatio: 2,
     },
     medium: {
@@ -649,6 +652,7 @@ const CONFIG = {
       fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
       mengerDepth: 2, blockSegments: 2, cloudLayers: 2, kaleidoscope: true,
       charSegments: 16, charShadow: true, companion: true, sanctuaryExtras: true,
+      memoryDetail: 2,
       bloom: true, bloomScale: 0.4, msaa: 0, pixelRatio: 1.75,
     },
     low: {
@@ -659,6 +663,7 @@ const CONFIG = {
       fractalDepth: 3, fractalInstances: 1400, structureScale: 0.6,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 1, kaleidoscope: false,
       charSegments: 11, charShadow: false, companion: true, sanctuaryExtras: true,
+      memoryDetail: 1,
       bloom: false, bloomScale: 0.35, msaa: 0, pixelRatio: 1.2,
     },
     /* The floor. Meant for a phone that would rather stay cool than look its
@@ -675,6 +680,7 @@ const CONFIG = {
       fractalDepth: 3, fractalInstances: 900, structureScale: 0.45,
       mengerDepth: 1, blockSegments: 1, cloudLayers: 0, kaleidoscope: false,
       charSegments: 9, charShadow: false, companion: false, sanctuaryExtras: false,
+      memoryDetail: 1,
       bloom: false, bloomScale: 0.30, msaa: 0, pixelRatio: 1.0,
     },
   },

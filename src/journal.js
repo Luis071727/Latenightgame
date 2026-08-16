@@ -2,6 +2,7 @@ import {
   DISCOVERIES, COLLECTIONS, COSMETICS, TITLES, RARITY,
   discoveriesOf, title, cosmetic,
 } from './discoveries.js';
+import { paintEmblem } from './shapes.js';
 
 /**
  * The Dream Archive, as a page you can open.
@@ -225,14 +226,21 @@ export function createJournal({
       for (const d of list) {
         const has = found.includes(d.id);
         const item = el(`j-mem ${has ? 'found' : 'unfound'} r-${d.rarity}`);
-        const dot = el('j-mem-dot');
-        dot.style.setProperty('--r-glow', String(RARITY[d.rarity]?.glow ?? 1));
-        item.appendChild(dot);
+
+        /* The emblem, drawn from the same numbers as the solid standing out
+           there in the grass. An unfound one is the identical drawing at a
+           lower opacity — which is the point: the silhouette is the hint, and
+           a row of shapes you have not found yet is a far better reason to go
+           and look than a row of question marks would be. */
+        const em = el('j-mem-emblem');
+        em.style.setProperty('--r-glow', String(RARITY[d.rarity]?.glow ?? 1));
+        paintEmblem(em, d.shape);
+        item.appendChild(em);
 
         const txt = el('j-mem-text');
-        // An unfound memory keeps its name. What it shows instead is its
-        // rarity and the fact that it exists — enough to be worth going to
-        // look for, never enough to be a checklist with directions on it.
+        // An unfound memory keeps its name back. What it shows instead is its
+        // form, its rarity and the fact that it exists — enough to be worth
+        // going to look for, never enough to be a checklist with directions.
         txt.appendChild(el('j-mem-name', has ? d.name : '—'));
         txt.appendChild(el('j-mem-note',
           has ? d.note

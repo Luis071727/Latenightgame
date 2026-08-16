@@ -723,16 +723,37 @@
   }
   .j-set.done { color: var(--accent); }
 
-  .j-mem { display: flex; align-items: flex-start; gap: 12px; padding: 9px 0; }
+  /* ── emblems ──────────────────────────────────────────────────────────
+     Every memory, title and cosmetic is drawn from the shape vocabulary in
+     shapes.js: an outline and a cross-section, generated as inline SVG so it
+     is crisp at any size, weighs nothing and works with no connection. A
+     found one is lit; an unfound one is the same drawing turned down, so the
+     silhouette itself is the hint. */
+  .emblem { width: 100%; height: 100%; display: block; overflow: visible; }
+  .e-body {
+    fill: none; stroke: currentColor; stroke-width: 1.1;
+    opacity: 0.5; vector-effect: non-scaling-stroke;
+  }
+  .e-wire {
+    fill: none; stroke: currentColor; stroke-width: 1.5;
+    stroke-linejoin: round; opacity: 0.95; vector-effect: non-scaling-stroke;
+  }
+  .e-fill { fill: currentColor; opacity: 0.13; stroke: none; }
+
+  .j-mem { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }
   .j-mem + .j-mem { border-top: 1px solid rgba(226, 214, 255, 0.05); }
-  .j-mem-dot {
-    width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none;
-    background: rgba(226, 214, 255, 0.16);
+  .j-mem-emblem {
+    width: 34px; height: 34px; flex: none; margin-top: 1px;
+    color: rgba(226, 214, 255, 0.30);
+    transition: color 0.5s ease, filter 0.5s ease;
   }
-  .j-mem.found .j-mem-dot {
-    background: var(--accent);
-    box-shadow: 0 0 calc(6px * var(--r-glow, 1)) rgba(255, 205, 150, 0.75);
+  .j-mem.found .j-mem-emblem {
+    color: var(--accent);
+    filter: drop-shadow(0 0 calc(3px * var(--r-glow, 1)) rgba(255, 205, 150, 0.55));
   }
+  /* rarer finds burn a little harder, the same way they do in the world */
+  .j-mem.found.r-dream .j-mem-emblem  { color: rgba(255, 222, 180, 0.95); }
+  .j-mem.found.r-mythic .j-mem-emblem { color: rgba(255, 232, 200, 1); }
   .j-mem-text { flex: 1; min-width: 0; }
   .j-mem-name { font: 300 14px/1.4 var(--serif); letter-spacing: 0.05em; color: var(--ink); }
   .j-mem.unfound .j-mem-name { color: rgba(240, 228, 255, 0.22); letter-spacing: 0.3em; }
