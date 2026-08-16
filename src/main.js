@@ -6,6 +6,7 @@ import { createWater } from './water.js';
 import { createMotes } from './motes.js';
 import { createFireflies } from './fireflies.js';
 import { createHaze } from './haze.js';
+import { createAmbience } from './ambience.js';
 import { createTerrain } from './terrain.js';
 import { WORLDS, SANCTUARY, createWorldContent, makePaletteCycler } from './worlds.js';
 import { createGate } from './gate.js';
@@ -490,6 +491,33 @@ const CONFIG = {
 
   haze: { radius: 110, height: 7.5, amount: 0.30, centerY: 1.5 },
 
+  /* Ambience: things to notice, that ask nothing. Three instanced or points
+     systems, one draw call each, all counted by the tier — see ambience.js.
+
+     The drift and the curtains are deliberately far below the bloom threshold.
+     They are air and weather, not light, and the moment either of them starts
+     to bloom they undo the readability work rather than adding to the mood. */
+  ambience: {
+    // drifting pollen, in a box that travels with the viewer and wraps
+    driftBox: 90,            // how wide that box is, in units
+    driftHeight: 16,         // ...and how tall
+    driftSize: 26,           // point size at one unit of depth
+    driftOpacity: 0.16,      // very faint. This is air, not fireflies.
+
+    // shapes standing in the weather past the rim, as fractions of the radius
+    silhouetteNear: 1.30,
+    silhouetteFar: 2.10,
+    silhouetteHeight: 46,
+    silhouetteDepth: 0.42,   // how far they darken against the fog
+
+    // the slow thing the sky is doing
+    curtainRadius: 300,
+    curtainWidth: 220,
+    curtainHeight: 150,
+    curtainLift: -20,        // hung from below the horizon so they stand up out of it
+    curtainAmount: 0.13,
+  },
+
   input: {
     dragThreshold: 12,       // px before a touch counts as a drag, not a tap
     tapMaxMs: 420,           // a touch shorter than this, and still, is a tap
@@ -570,6 +598,7 @@ const CONFIG = {
   tiers: {
     high: {
       maxMotes: 48, starScale: 1.0, particleScale: 1.0,
+      driftCount: 260, silhouettes: 22, skyVeils: 3,
       reflections: true, reflectionSize: 512, waterNormalSize: 256,
       groundCells: 128,
       fractalDepth: 5, fractalInstances: 7000, structureScale: 1.0,
@@ -579,6 +608,7 @@ const CONFIG = {
     },
     medium: {
       maxMotes: 34, starScale: 0.7, particleScale: 0.8,
+      driftCount: 170, silhouettes: 16, skyVeils: 2,
       reflections: true, reflectionSize: 256, waterNormalSize: 128,
       groundCells: 96,
       fractalDepth: 4, fractalInstances: 3600, structureScale: 0.8,
@@ -588,6 +618,7 @@ const CONFIG = {
     },
     low: {
       maxMotes: 20, starScale: 0.45, particleScale: 0.6,
+      driftCount: 90, silhouettes: 11, skyVeils: 1,
       reflections: false, reflectionSize: 0, waterNormalSize: 128,
       groundCells: 64,
       fractalDepth: 3, fractalInstances: 1400, structureScale: 0.6,
@@ -601,6 +632,9 @@ const CONFIG = {
        ratio and the transparent sheets, not the instance count. */
     saver: {
       maxMotes: 14, starScale: 0.30, particleScale: 0.40,
+      // the silhouettes stay: they are the most atmosphere per pixel of fill
+      // of anything here, and six of them is a horizon
+      driftCount: 0, silhouettes: 6, skyVeils: 0,
       reflections: false, reflectionSize: 0, waterNormalSize: 64,
       groundCells: 48,
       fractalDepth: 3, fractalInstances: 900, structureScale: 0.45,
@@ -833,6 +867,7 @@ function start() {
   let gate = null;
   let cyclePalette = null;
   let fragments = null;
+  let ambience = null;         // drift, silhouettes, curtains — scenery only
   let display = null;          // the memories standing up, in the sanctuary
   let inSanctuary = false;
   let returnTo = 0;            // the world the sanctuary's gate returns to
@@ -852,11 +887,17 @@ function start() {
     if (content) content.dispose();
     if (gate) gate.dispose();
     if (fragments) fragments.dispose();
+    if (ambience) ambience.dispose();
     if (display) { display.dispose(); display = null; }
 
     terrain.build(world);
     content = createWorldContent({ CONFIG, quality, scene, world, terrain });
     gate = createGate({ CONFIG, scene, world, terrain });
+    // scenery, and only scenery: nothing in here can be gathered, woken or
+    // missed, and it is built before the pre-warm below so its shaders link
+    // while the screen is still full of gate-light
+    ambience = createAmbience({ CONFIG, quality, scene, world });
+    ambience.setViewportHeight(window.innerHeight);
     cyclePalette = makePaletteCycler(p, CONFIG.mood);
     gateAnnounced = false;
     ui.setStepPrompt(false);
@@ -1020,6 +1061,7 @@ function start() {
 
     sky.setViewportHeight(h);
     fireflies.setViewportHeight(h);
+    ambience?.setViewportHeight(h);
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 120));
@@ -1190,6 +1232,7 @@ function start() {
     fireflies.setPalette(p);
     motes.setPalette(p);
     fragments?.setPalette(p);
+    ambience?.setPalette(p);
     display?.setPalette(p);
     character.setPalette(p);
     gate.setPalette(p);
@@ -1406,6 +1449,7 @@ function start() {
     if (water) water.update(dt, ctx);
     fireflies.update(dt, ctx);
     haze.update(dt, ctx);
+    ambience.update(dt, ctx);
     content.update(dt, ctx);
 
     post.render(dt);
@@ -1453,6 +1497,7 @@ function start() {
     get gate() { return gate; },
     get motes() { return motes; },
     get fragments() { return fragments; },
+    get ambience() { return ambience; },
     get display() { return display; },
     get inSanctuary() { return inSanctuary; },
     journal,

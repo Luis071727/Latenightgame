@@ -16,7 +16,9 @@ import { makeWaterNormals } from './textures.js';
  * not the mood.
  */
 export function createWater({ CONFIG, quality, scene, renderer, world }) {
-  const normals = makeWaterNormals(quality.waterNormalSize);
+  // built on demand: the reflective path keeps one for the life of the tier
+  // and does not want a fresh one per arrival
+  const makeNormals = () => makeWaterNormals(quality.waterNormalSize);
   // A world that names a size gets a lake anchored at its own centre; without
   // one the plane is an endless sea that rides along under the camera. A lake
   // is nearly always what a floating island wants — an endless sea drawn under
@@ -28,12 +30,91 @@ export function createWater({ CONFIG, quality, scene, renderer, world }) {
   const palette = { ...CONFIG.palette, ...(world?.palette || {}) };
 
   return quality.reflections
-    ? reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer, palette, level, anchored })
-    : shadedWater({ CONFIG, scene, geometry, normals, palette, level, anchored });
+    ? reflectiveWater({ CONFIG, quality, scene, geometry, makeNormals, renderer, palette, level, anchored })
+    : shadedWater({ CONFIG, scene, geometry, normals: makeNormals(), palette, level, anchored });
 }
 
-/* ── medium / high: real mirrored reflections ────────────────────────── */
-function reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer, palette, level, anchored }) {
+/* ── medium / high: real mirrored reflections ─────────────────────────────
+ *
+ * One lake, kept for the life of the tier.
+ *
+ * This used to be built and thrown away on every arrival, and it leaked: the
+ * addon holds its reflection target in a closure and hands out only the
+ * texture, and disposing a render target's texture does not free the target —
+ * measured at one half-float target per visit to the harbour, standing back in
+ * the meadow each time to be sure, climbing without bound over a session.
+ *
+ * Rather than reach into the addon for a handle it does not offer, the whole
+ * thing is simply kept. Only one world has water, its plane is the only part
+ * that differs, and swapping the geometry is cheap. That fixes the leak
+ * outright and takes a shader compile — including the fragment-shader surgery
+ * below — out of the gate transition as well.
+ *
+ * A tier change still cannot free the old target, since the handle is still
+ * not ours to take. But tiers only ever step downward and there are four of
+ * them, so that is a bounded three targets in the worst session anybody can
+ * have, against one per arrival for as long as they keep playing.
+ */
+let cached = null;      // { water, normals, size, accum }
+
+function reflectiveWater({ CONFIG, quality, scene, geometry, makeNormals, renderer, palette, level, anchored }) {
+  if (cached && cached.size !== quality.reflectionSize) {
+    // the tier moved: let go of everything we are actually able to let go of
+    cached.water.material.uniforms.mirrorSampler.value?.dispose?.();
+    cached.water.material.dispose();
+    cached.water.geometry.dispose();
+    cached.normals.dispose();
+    cached = null;
+  }
+
+  if (cached) {
+    // reuse: this world's plane replaces the last one's, and nothing else moves
+    cached.water.geometry.dispose();
+    cached.water.geometry = geometry;
+  } else {
+    cached = buildReflective({ CONFIG, quality, geometry, normals: makeNormals(), palette });
+  }
+
+  const entry = cached;
+  const water = entry.water;
+
+  water.rotation.x = -Math.PI / 2;
+  water.renderOrder = -10;
+  water.material.transparent = false;
+  water.material.uniforms.size.value = CONFIG.water.rippleSize;
+  water.material.uniforms.uSmear.value = CONFIG.water.reflectionSmear;
+  water.material.uniforms.uReflectivity.value = CONFIG.water.reflectivity;
+  water.material.uniforms.waterColor.value.set(palette.waterDeep);
+  water.position.set(0, level, 0);
+  entry.accum = 0;
+  scene.add(water);
+
+  return {
+    object: water,
+    reflective: true,
+    setPalette(next) {
+      if (next.waterDeep) water.material.uniforms.waterColor.value.set(next.waterDeep);
+    },
+    update(dt, ctx) {
+      entry.accum += dt;
+      water.material.uniforms.time.value += dt * CONFIG.water.flowSpeed;
+      if (!anchored) {
+        // keep the plane centred under the camera so it never runs out
+        water.position.x = ctx.cameraPosition.x;
+        water.position.z = ctx.cameraPosition.z;
+      }
+    },
+    /* Leaving the harbour takes the lake out of the scene and no further. The
+       geometry belongs to the cache and is disposed by the next build; the
+       material, the normal map and the reflection target are the whole point
+       of keeping it. */
+    dispose() {
+      scene.remove(water);
+    },
+  };
+}
+
+function buildReflective({ CONFIG, quality, geometry, normals, palette }) {
   const p = palette;
 
   const water = new Water(geometry, {
@@ -98,44 +179,17 @@ function reflectiveWater({ CONFIG, quality, scene, geometry, normals, renderer, 
 
   // The addon renders the reflection every frame. At 30fps of *reflection*
   // updates the water still reads as alive, and it halves the cost of the
-  // most expensive pass in the scene.
-  let reflectAccum = 0;
+  // most expensive pass in the scene. The accumulator lives on the cache entry
+  // rather than in here, so it survives the lake being reused.
+  const entry = { water, normals, size: quality.reflectionSize, accum: 0 };
   const baseOnBeforeRender = water.onBeforeRender;
   water.onBeforeRender = function (rndr, scn, cam) {
-    if (reflectAccum < CONFIG.water.reflectionInterval) return;
-    reflectAccum = 0;
+    if (entry.accum < CONFIG.water.reflectionInterval) return;
+    entry.accum = 0;
     baseOnBeforeRender.call(this, rndr, scn, cam);
   };
 
-  scene.add(water);
-
-  water.position.y = level;
-
-  return {
-    object: water,
-    reflective: true,
-    setPalette(next) {
-      if (next.waterDeep) water.material.uniforms.waterColor.value.set(next.waterDeep);
-    },
-    update(dt, ctx) {
-      reflectAccum += dt;
-      water.material.uniforms.time.value += dt * CONFIG.water.flowSpeed;
-      if (!anchored) {
-        // keep the plane centred under the camera so it never runs out
-        water.position.x = ctx.cameraPosition.x;
-        water.position.z = ctx.cameraPosition.z;
-      }
-    },
-    dispose() {
-      scene.remove(water);
-      geometry.dispose();
-      normals.dispose();
-      // the addon keeps its reflection target in a closure; its texture is the
-      // only handle we get, and disposing that releases the attachment
-      water.material.uniforms.mirrorSampler.value?.dispose?.();
-      water.material.dispose();
-    },
-  };
+  return entry;
 }
 
 /* ── low: no second scene pass, just a well-behaved dark plane ────────── */

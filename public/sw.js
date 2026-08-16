@@ -7,7 +7,7 @@
  * asset filenames and a given URL's contents never change. Bumping VERSION
  * drops the old cache wholesale.
  */
-const VERSION = 'soft-worlds-v11';
+const VERSION = 'soft-worlds-v12';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
