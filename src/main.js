@@ -21,6 +21,7 @@ import { createArchive } from './archive.js';
 import { createFragments } from './fragments.js';
 import { createJournal } from './journal.js';
 import { createSanctuaryDisplay } from './sanctuary.js';
+import { createStory, BEATS as STORY_BEATS } from './story.js';
 import { createAnalytics, EVENTS } from './analytics.js';
 import { createProfileService, createLeaderboardService } from './leaderboard.js';
 import { RARITY, title, cosmetic, applyVariant } from './discoveries.js';
@@ -413,6 +414,28 @@ const CONFIG = {
     tapDecaySeconds: 1.6,    // how long a tap keeps nudging them along
   },
 
+  /* The dream telling itself. All the writing is in the two tables at the top
+     of story.js; these are only the timings.
+
+     The whisper numbers are all restraints rather than triggers — every one of
+     them is a reason *not* to speak. `whisperAfterSeconds` is a stretch with
+     no progress of any kind, `whisperSettleSeconds` keeps it quiet while
+     somebody is still taking a new place in, and `whispersPerVisit` is the
+     point at which it accepts that the player is fine and stops offering.
+     Turning `whispers` off leaves the beats and removes the nudging entirely. */
+  story: {
+    holdSeconds: 7.5,          // how long a passage stays up of its own accord
+    minHoldSeconds: 2.0,       // ...and the least it stays before moving skips it
+    gapSeconds: 3.5,           // enforced quiet between one passage and the next
+
+    whispers: true,
+    whisperAfterSeconds: 34,   // no progress at all for this long, first
+    whisperSettleSeconds: 20,  // ...and never this soon after arriving somewhere
+    whisperGapSeconds: 95,     // ...and never closer together than this
+    whispersPerVisit: 3,       // ...and only this many before it lets you be
+    carryHint: 3,              // motes in tow before it mentions the monument
+  },
+
   ui: {
     hintDelayMs: 2600,
     hint2DelayMs: 9000,      // when the "or tap ahead of yourself" nudge appears
@@ -520,6 +543,9 @@ function applyMotionPreference() {
   const reduced = settings.reducedMotion ?? osReducedMotion;
   motion.camera = reduced ? 0.18 : 1;   // camera bob
   motion.scene  = reduced ? 0.6 : 1;    // drift of everything else
+  // ...and the same choice reaches the CSS, so the overlays shorten their
+  // fades whether the preference came from the OS or from the settings panel
+  document.body.classList.toggle('reduced-motion', reduced);
 }
 applyMotionPreference();
 
@@ -597,8 +623,13 @@ function start() {
   let companion  = createCompanion({ CONFIG, quality, scene });
   let post       = createPost({ CONFIG, quality, renderer, scene, camera, motion });
 
-  // a gathered mote is acknowledged by the light at the chest
-  motes.onGather = () => character.flare();
+  // a gathered mote is acknowledged by the light at the chest — and, the very
+  // first time, by the dream explaining what it is you have just picked up
+  function onMoteGathered() {
+    character.flare();
+    story.note('mote');
+  }
+  motes.onGather = onMoteGathered;
 
   const audio = createAudio(CONFIG);
   audio.setMuted(settings.muted);
@@ -675,8 +706,17 @@ function start() {
     journal.show();
   };
 
+  /* The dream, telling itself. It owns every passage the game says that is not
+     a name or a found thing, and it is handed events rather than asked
+     questions — so nothing else in here has to know what a beat is or whether
+     one has been said before. */
+  const story = createStory({ CONFIG, archive, ui });
+
   ui.onSettingsSave = saveSettings;
-  ui.onBegin = () => ui.showWorldName(world.name, 1400);
+  ui.onBegin = () => {
+    ui.showWorldName(world.name, 1400);
+    story.begin(world.key);
+  };
   ui.onStep = () => {
     if (!ui.transitioning && gate && gate.enterable
         && gate.distance2(rig.state.x, rig.state.z) < CONFIG.gate.promptRadius ** 2) {
@@ -805,11 +845,18 @@ function start() {
     }
 
     // name the place as it comes into view — held back so it arrives with the
-    // gate-light still clearing, not on top of it
+    // gate-light still clearing, not on top of it. The name sits at the top of
+    // the frame and the dream's own line at the bottom, so arriving reads as a
+    // page turning rather than as two notices fighting.
+    //
+    // Both are held until the title has lifted: on the very first load this
+    // runs before anyone has pressed begin, and the opening beat covers the
+    // first world itself.
     if (ui.began) {
       ui.showWorldName(
         world.variantName ? `${world.name} — ${world.variantName.toLowerCase()}` : world.name,
         1400);
+      story.arrive(world.key, isHome);
     }
 
     // water is per-world: most of them have none at all
@@ -921,7 +968,7 @@ function start() {
     character = createCharacter({ CONFIG, quality, scene });
     companion = createCompanion({ CONFIG, quality, scene });
     post = createPost({ CONFIG, quality, renderer, scene, camera, motion });
-    motes.onGather = () => character.flare();
+    motes.onGather = onMoteGathered;
 
     // ...and this rebuilds the ground, the fractals and the water, and
     // re-tints everything that was just replaced
@@ -962,6 +1009,9 @@ function start() {
     if (!rec) return;
 
     ui.showMemory('new memory', d.name, d.note, d.rarity);
+    // ...and the first one is also where the dream draws the line between a
+    // mote, which is light, and a memory, which is a thing that happened
+    story.note('memory');
     analytics.track(EVENTS.discoveryFound,
       { id: d.id, world: d.world, rarity: d.rarity });
     character.flare();
@@ -976,6 +1026,7 @@ function start() {
       serves the walked-into ring and the tapped "step through" prompt. */
   function enterGate() {
     analytics.track(EVENTS.gateEntered, { from: world.key });
+    story.note('travel');
     ui.setStepPrompt(false);
     // from the sanctuary the gate is the way back to where you were; from a
     // world it is the way on to the next one
@@ -988,7 +1039,16 @@ function start() {
       again, not like a page reload */
   function resetJourney() {
     archive.reset();
-    if (!ui.transition(() => loadWorld(0))) loadWorld(0);
+    /* Begun again means taught again. The archive's reset has already dropped
+       every `story:` milestone, so the opening beat is owed — and it has to be
+       claimed *before* the world is built, or buildPlace's own arrival line
+       would be queued in front of it. */
+    const begin = () => {
+      story.reset();
+      story.begin(WORLDS[0].key);
+      loadWorld(0);
+    };
+    if (!ui.transition(begin)) begin();
   }
 
   /* ── slow ambient wind, a lazy noise field made of sines ───────────── */
@@ -1052,6 +1112,15 @@ function start() {
     gate.setPalette(p);
   }
 
+  /* What the dream can see of where the player is up to. Filled in each frame
+     and handed to story.update — one reused object, because this is per-frame
+     and a fresh one would be sixty allocations a second to describe a mood. */
+  const situation = {
+    began: false, transitioning: false, menuOpen: false, moving: false,
+    inSanctuary: false, gateEnterable: false, gateNear: false,
+    freeMotes: 0, heldMotes: 0, awake: 0, delivered: 0, fragmentNear: false,
+  };
+
   // the ground's light list, rebuilt each frame from two sources and never
   // reallocated
   const lights = [];
@@ -1113,6 +1182,7 @@ function start() {
       content.updateAwakening(dt, rig.state.x, rig.state.z, (i, s) => {
         if (inSanctuary) return;      // nothing here sleeps, or is scored
         audio.addLayer();
+        story.note('awaken');
         archive.noteAwakened(world.key, i, content.awake);
         analytics.track(EVENTS.structureAwakened, { world: world.key });
         companion?.notice(s.x, s.y, s.z);   // off it goes to look
@@ -1129,6 +1199,7 @@ function start() {
     const arrived = motes.update(dt, ctx, rig.state, content.monumentPoint);
     if (arrived > 0 && !inSanctuary) {
       delivered += arrived;
+      story.note('deliver');
       archive.noteDelivered(world.key, delivered);
       content.setMonumentGrowth(delivered / CONFIG.motes.monumentTarget);
     }
@@ -1148,6 +1219,9 @@ function start() {
     if (!gateAnnounced && gate.enterable && !inSanctuary) {
       gateAnnounced = true;
       if (ui.began) ui.announce('a gate has opened');
+      // ...and the first time it ever happens, what opened it and what to do
+      // with it, which is the one piece of the loop nothing else teaches
+      story.note('gate-open');
     }
 
     // standing before an open gate, offer the step — travel must never depend
@@ -1191,6 +1265,26 @@ function start() {
     display?.update(dt, ctx);
 
     companion?.update(dt, ctx, rig.state, gate);
+
+    /* ── and the dream, saying something about all that ────────────────
+     * Last of the gameplay systems on purpose: everything it reads has been
+     * settled by now, including whether there is an unfound memory in view.
+     */
+    situation.began = ui.began;
+    situation.transitioning = ui.transitioning;
+    situation.menuOpen = ui.panelOpen || journal.open;
+    // intent as well as motion, so a passage gets out of the way the moment
+    // the player reaches for the stick rather than once they are under way
+    situation.moving = input.navigating || rig.moving;
+    situation.inSanctuary = inSanctuary;
+    situation.gateEnterable = gate.enterable;
+    situation.gateNear = gateD2 < CONFIG.gate.promptRadius ** 2;
+    situation.freeMotes = motes.free;
+    situation.heldMotes = motes.held;
+    situation.awake = content.awake;
+    situation.delivered = delivered;
+    situation.fragmentNear = !!frag;
+    story.update(dt, situation);
 
     // the ground takes light from the motes and from whatever is awake, as
     // one list of the nearest few
@@ -1256,6 +1350,14 @@ function start() {
     get display() { return display; },
     get inSanctuary() { return inSanctuary; },
     journal,
+    story,
+    /** say a beat again regardless of whether it has been said — for reading
+        the copy back without playing to it */
+    say(id) {
+      const lines = STORY_BEATS[id];
+      if (lines) ui.showBeat(lines);
+      return lines || Object.keys(STORY_BEATS);
+    },
     /** visit the sanctuary, or come back from it */
     home() { inSanctuary ? loadWorld(returnTo) : loadSanctuary(); return world.key; },
     /** walk to the nearest unfound memory, for looking at one on purpose */

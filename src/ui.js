@@ -22,6 +22,9 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
   const tapmarkEl = document.getElementById('tapmark');
   const veilEl = document.getElementById('veil');
   const flashEl = document.getElementById('flash');
+  const beatEl = document.getElementById('beat');
+  const beat1El = beatEl?.querySelector('.b1');
+  const beat2El = beatEl?.querySelector('.b2');
 
   let began = false;
   let dim = 1;                  // 1 = awake, 0 = fully asleep
@@ -321,6 +324,30 @@ export function createUI({ CONFIG, audio, settings, onMotionChange, onQualityCha
     setStepPrompt(visible) {
       stepEl.classList.toggle('show', !!visible);
     },
+
+    /**
+     * The dream saying something, low in the frame.
+     *
+     * Deliberately dumber than `showMemory`: no queue, no timer, no rarity.
+     * story.js owns when a passage appears, how long it stays and what puts it
+     * away, because all three of those are decisions about the *narrative* and
+     * they belong next to the writing rather than in here.
+     *
+     * @param lines one or two short strings
+     */
+    showBeat(lines) {
+      if (!beatEl) return;
+      beat1El.textContent = lines[0] || '';
+      beat2El.textContent = lines[1] || '';
+      beatEl.classList.add('show');
+    },
+
+    hideBeat() {
+      beatEl?.classList.remove('show');
+    },
+
+    /** true while the settings card is up — nothing should narrate over it */
+    get panelOpen() { return panelEl.classList.contains('open'); },
 
     /** main installs what opening the archive does, once the journal exists */
     set onArchive(fn) {
